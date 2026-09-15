@@ -242,7 +242,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     refreshUsers();
     refreshDashboard();
-  }, [refreshUsers, refreshDashboard]);
+
+    // Auto-refresh periodically from PostgreSQL so technician uploads from one phone
+    // are immediately visible to Admin users on other phones
+    const pollInterval = setInterval(() => {
+      if (isNetworkOnline) {
+        refreshDashboard();
+      }
+    }, 6000);
+
+    return () => clearInterval(pollInterval);
+  }, [refreshUsers, refreshDashboard, isNetworkOnline]);
 
   // Network simulator toggle
   const toggleNetworkSimulation = useCallback(() => {
