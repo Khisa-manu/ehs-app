@@ -1,0 +1,6 @@
+{
+  "name": "Spectrum Engineering EHS",
+  "description": "Spectrum Engineering EHS field technician clock-in, hazard reporting, and safety management system with secure authentication, offline sync, and tamper verification.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

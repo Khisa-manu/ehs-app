@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradMaskable" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <!-- Full bleed background for maskable icon -->
+  <rect width="512" height="512" fill="url(#bgGradMaskable)"/>
+  
+  <!-- Safe zone scaled down by 0.75 and centered -->
+  <g transform="translate(64, 64) scale(0.75)">
+    <!-- Outer subtle tech ring -->
+    <circle cx="256" cy="256" r="210" fill="none" stroke="#334155" stroke-width="4" stroke-dasharray="8 8" opacity="0.6"/>
+    
+    <!-- Safety Shield Structure -->
+    <path d="M256 96 L376 148 C376 270 256 380 256 380 C256 380 136 270 136 148 Z" 
+          fill="#1e293b" stroke="url(#shieldGrad)" stroke-width="14" stroke-linejoin="round"/>
+          
+    <!-- EHS Pulse / Clock Activity Line -->
+    <path d="M170 250 L210 250 L234 190 L266 310 L290 230 L310 250 L342 250" 
+          fill="none" stroke="url(#emeraldGrad)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+          
+    <!-- Center Official Status Node -->
+    <circle cx="256" cy="256" r="9" fill="#38bdf8"/>
+    
+    <!-- Clock ticks around the shield crown -->
+    <circle cx="256" cy="120" r="6" fill="#f59e0b"/>
+    <circle cx="330" cy="150" r="5" fill="#f59e0b" opacity="0.8"/>
+    <circle cx="182" cy="150" r="5" fill="#f59e0b" opacity="0.8"/>
+  </g>
+</svg>
