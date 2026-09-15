@@ -10,6 +10,7 @@ import {
   ReportPhoto,
   EHSAnswer 
 } from '../types';
+import { getApiUrl } from '../config';
 
 interface AppContextType {
   // Navigation & View
@@ -181,7 +182,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshUsers = useCallback(async () => {
     if (!isNetworkOnline) return;
     try {
-      const res = await fetch('/api/v1/users');
+      const res = await fetch(getApiUrl('/api/v1/users'));
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
@@ -190,7 +191,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
       // Fallback to /api/v1/technicians if needed
-      const techRes = await fetch('/api/v1/technicians');
+      const techRes = await fetch(getApiUrl('/api/v1/technicians'));
       if (techRes.ok) {
         const techData = await techRes.json();
         if (techData.success) {
@@ -216,11 +217,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!isNetworkOnline) return;
     try {
       const [sumRes, repRes, ehsRes, setRes, logsRes] = await Promise.allSettled([
-        fetch('/api/v1/admin/dashboard/summary'),
-        fetch('/api/v1/admin/reports'),
-        fetch('/api/v1/ehs/questions'),
-        fetch('/api/v1/admin/settings'),
-        fetch('/api/v1/admin/audit-logs'),
+        fetch(getApiUrl('/api/v1/admin/dashboard/summary')),
+        fetch(getApiUrl('/api/v1/admin/reports')),
+        fetch(getApiUrl('/api/v1/ehs/questions')),
+        fetch(getApiUrl('/api/v1/admin/settings')),
+        fetch(getApiUrl('/api/v1/admin/audit-logs')),
       ]);
 
       if (sumRes.status === 'fulfilled' && sumRes.value.ok) {
@@ -332,7 +333,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     for (const item of syncQueue) {
       try {
-        const res = await fetch('/api/v1/sync/batch', {
+        const res = await fetch(getApiUrl('/api/v1/sync/batch'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -468,7 +469,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Online submission
     try {
-      const res = await fetch('/api/v1/sync/batch', {
+      const res = await fetch(getApiUrl('/api/v1/sync/batch'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload),
@@ -499,7 +500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Admin Override
   const adminOverrideReport = async (reportId: string, newStatus: 'ON_TIME' | 'LATE' | 'EXCUSED', reason: string) => {
     try {
-      const res = await fetch(`/api/v1/admin/reports/${reportId}/override`, {
+      const res = await fetch(getApiUrl(`/api/v1/admin/reports/${reportId}/override`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -522,7 +523,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Update Settings
   const updateSettings = async (newSettings: Partial<SystemSettings>) => {
     try {
-      const res = await fetch('/api/v1/admin/settings', {
+      const res = await fetch(getApiUrl('/api/v1/admin/settings'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings),
@@ -548,7 +549,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     customExpectedStartTime?: string;
   }) => {
     try {
-      const res = await fetch('/api/v1/technicians', {
+      const res = await fetch(getApiUrl('/api/v1/technicians'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -568,7 +569,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Update Technician
   const updateTechnician = async (id: string, data: Partial<User>) => {
     try {
-      const res = await fetch(`/api/v1/technicians/${id}`, {
+      const res = await fetch(getApiUrl(`/api/v1/technicians/${id}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -590,7 +591,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAllUsers(prev => prev.filter(u => u.id !== id));
 
     try {
-      const res = await fetch(`/api/v1/technicians/${id}`, {
+      const res = await fetch(getApiUrl(`/api/v1/technicians/${id}`), {
         method: 'DELETE',
       });
       const json = await res.json();
@@ -608,7 +609,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Reset Demo Data
   const resetDemoData = async () => {
     try {
-      await fetch('/api/v1/system/reset-demo', { method: 'POST' });
+      await fetch(getApiUrl('/api/v1/system/reset-demo'), { method: 'POST' });
       localStorage.removeItem(LOCAL_STORAGE_QUEUE_KEY);
       setSyncQueue([]);
       await refreshUsers();
@@ -620,7 +621,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Export Reports CSV
   const exportReportsCsv = () => {
-    window.open('/api/v1/admin/reports/export?format=csv', '_blank');
+    window.open(getApiUrl('/api/v1/admin/reports/export?format=csv'), '_blank');
   };
 
   return (

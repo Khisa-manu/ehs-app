@@ -1,0 +1,44 @@
+# =========================================================================
+# FieldPulse EHS Mobile Backend - Apache Configuration for cPanel
+# =========================================================================
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Security: Block sensitive files from web access
+  <FilesMatch "\.(sql|env|log|ini|sh|bak)$">
+    Order allow,deny
+    Deny from all
+  </FilesMatch>
+
+  # Allow direct access to real files and directories (such as uploaded photos)
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Route all API calls to index.php
+  RewriteRule ^api/.*$ index.php [QSA,L]
+  RewriteRule ^index\.php$ - [L]
+  RewriteRule ^.*$ index.php [QSA,L]
+</IfModule>
+
+# Security Headers & MIME
+<IfModule mod_headers.c>
+  Header set Access-Control-Allow-Origin "*"
+  Header set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept"
+</IfModule>
+
+# Upload sizes for high-resolution inspection photos
+<IfModule mod_php7.c>
+  php_value upload_max_filesize 30M
+  php_value post_max_size 30M
+  php_value memory_limit 128M
+</IfModule>
+
+<IfModule mod_php8.c>
+  php_value upload_max_filesize 30M
+  php_value post_max_size 30M
+  php_value memory_limit 128M
+</IfModule>
