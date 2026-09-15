@@ -73,6 +73,28 @@ function hashCredentials(plain: string): string {
   return bcrypt.hashSync(plain, 10);
 }
 
+// Helper to log audit actions
+function logAudit(
+  db: DatabaseSync,
+  actorUserId: string,
+  actorName: string,
+  action: string,
+  entityType: string,
+  entityId: string,
+  details: Record<string, any> = {},
+  ipAddress = '127.0.0.1'
+): void {
+  try {
+    const id = `aud-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    db.prepare(`
+      INSERT INTO audit_logs (id, actor_user_id, actor_name, action, entity_type, entity_id, details_json, ip_address)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, actorUserId, actorName, action, entityType, entityId, JSON.stringify(details), ipAddress);
+  } catch (e) {
+    console.error('[SQLite] Failed to write audit log:', e);
+  }
+}
+
 function initSqliteDatabase(): DatabaseSync {
   const db = new DatabaseSync(DB_FILE);
   db.exec('PRAGMA foreign_keys = ON;');
@@ -84,6 +106,27 @@ function initSqliteDatabase(): DatabaseSync {
     const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
     db.exec(schemaSql);
   }
+
+  // Schema migration check: ensure ehs_incidents table exists
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ehs_incidents (
+      id TEXT PRIMARY KEY,
+      technician_id TEXT NOT NULL,
+      technician_name TEXT NOT NULL,
+      title TEXT NOT NULL,
+      incident_type TEXT NOT NULL,
+      risk_level TEXT NOT NULL,
+      description TEXT NOT NULL,
+      immediate_action_taken TEXT NOT NULL,
+      latitude REAL,
+      longitude REAL,
+      photo_url TEXT,
+      status TEXT NOT NULL DEFAULT 'OPEN',
+      resolution_notes TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 
   // Schema migration check: ensure password_hash column exists
   try {
@@ -215,12 +258,53 @@ export function sqliteApiPlugin(): Plugin {
         console.error('[SQLite] Failed to initialize SQLite database:', e);
       }
 
+      const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+      if (!fs.existsSync(UPLOADS_DIR)) {
+        fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      }
+
       server.middlewares.use(async (req, res, next) => {
         const url = req.url || '';
         const method = req.method || 'GET';
 
+        // 1. Static Evidence Photo Serving (for Android, mobile, and web preview)
+        if (url.startsWith('/uploads/') || url.startsWith('/api/uploads/')) {
+          const rawSub = url.split('?')[0].replace(/^\/api\/uploads\//, '').replace(/^\/uploads\//, '');
+          const safeSub = path.normalize(rawSub).replace(/^(\.\.[\/\\])+/, '');
+          const fullPath = path.join(UPLOADS_DIR, safeSub);
+
+          if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+            const ext = path.extname(fullPath).toLowerCase();
+            const mimeTypes: Record<string, string> = {
+              '.jpg': 'image/jpeg',
+              '.jpeg': 'image/jpeg',
+              '.png': 'image/png',
+              '.webp': 'image/webp',
+              '.gif': 'image/gif'
+            };
+            res.setHeader('Content-Type', mimeTypes[ext] || 'image/jpeg');
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+            const stream = fs.createReadStream(fullPath);
+            stream.pipe(res);
+            return;
+          } else {
+            res.statusCode = 404;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            return res.end(JSON.stringify({ success: false, error: 'Photo evidence not found' }));
+          }
+        }
+
+        // Support both /api/v1/ and /v1/ prefixes
+        let normalizedUrl = url;
+        if (normalizedUrl.startsWith('/v1/')) {
+          normalizedUrl = '/api' + normalizedUrl;
+        }
+
         // Only handle /api/v1/ routes
-        if (!url.startsWith('/api/v1/')) {
+        if (!normalizedUrl.startsWith('/api/v1/')) {
           return next();
         }
 
@@ -234,7 +318,7 @@ export function sqliteApiPlugin(): Plugin {
           }
         }
 
-        const [pathname, queryString] = url.split('?');
+        const [pathname, queryString] = normalizedUrl.split('?');
         const queryParams = new URLSearchParams(queryString || '');
 
         // Helper to read JSON body
@@ -637,17 +721,53 @@ export function sqliteApiPlugin(): Plugin {
 
           if (pathname === '/api/v1/photos/upload-direct' && method === 'POST') {
             const body = await readBody();
+            const photoType = (body.photoType || 'PPE_SELFIE').replace(/[^a-zA-Z0-9_-]/g, '');
+            const clientPhotoId = (body.clientPhotoId || 'p-' + Date.now()).replace(/[^a-zA-Z0-9_-]/g, '');
+            const today = new Date().toISOString().split('T')[0];
+            const todayDir = path.join(UPLOADS_DIR, today);
+            if (!fs.existsSync(todayDir)) {
+              fs.mkdirSync(todayDir, { recursive: true });
+            }
+
+            const filename = `${photoType}_${clientPhotoId}.jpg`;
+            const filePath = path.join(todayDir, filename);
+            const storageKey = `uploads/${today}/${filename}`;
+
+            let fileSizeBytes = 45000;
+            let checksumSha256 = 'sha256-' + Date.now();
+            let savedUrl = '/' + storageKey;
+
+            const dataUrl = body.dataUrl || body.photoBase64 || body.image || '';
+            if (dataUrl) {
+              let buffer: Buffer | null = null;
+              if (dataUrl.startsWith('data:image')) {
+                const parts = dataUrl.split(',');
+                if (parts.length === 2) {
+                  buffer = Buffer.from(parts[1], 'base64');
+                }
+              } else {
+                buffer = Buffer.from(dataUrl, 'base64');
+              }
+
+              if (buffer && buffer.length > 0) {
+                fs.writeFileSync(filePath, buffer);
+                fileSizeBytes = buffer.length;
+                checksumSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+                savedUrl = '/' + storageKey;
+              }
+            }
+
             return json({
               success: true,
               data: {
                 id: 'photo-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
                 clientPhotoId: body.clientPhotoId || 'p-' + Date.now(),
                 photoType: body.photoType || 'PPE_SELFIE',
-                storageKey: `uploads/${new Date().toISOString().split('T')[0]}/photo_${Date.now()}.jpg`,
-                dataUrl: body.dataUrl || '',
-                fileSizeBytes: body.dataUrl ? Math.round((body.dataUrl.length * 3) / 4) : 450000,
+                storageKey,
+                dataUrl: savedUrl,
+                fileSizeBytes,
                 mimeType: 'image/jpeg',
-                checksumSha256: 'sha256-' + Date.now(),
+                checksumSha256,
                 capturedAt: body.capturedAt || new Date().toISOString(),
                 latitude: Number(body.latitude || 37.7749),
                 longitude: Number(body.longitude || -122.4194),
@@ -675,14 +795,31 @@ export function sqliteApiPlugin(): Plugin {
               });
             }
 
-            const tech = db.prepare('SELECT * FROM users WHERE id = ?').get(technicianId) as any;
+            let tech = db.prepare('SELECT * FROM users WHERE id = ? OR employee_id = ? OR email = ?').get(technicianId, technicianId, technicianId) as any;
+            if (!tech) {
+              const safeTechId = technicianId.startsWith('usr-') ? technicianId : `usr-${technicianId}`;
+              const safeEmpId = body.employeeId || `EMP-${Date.now().toString().slice(-4)}`;
+              const safeName = (body.technicianName || 'Field Technician').trim();
+              const safeEmail = `${safeEmpId.toLowerCase()}@spectrum-ehs.com`;
+              try {
+                db.prepare(`
+                  INSERT INTO users (id, uid, email, full_name, role, employee_id, password_hash, is_active)
+                  VALUES (?, ?, ?, ?, 'TECHNICIAN', ?, '$2b$10$6izK0RnE0Uj7CVOzyn8AHuUfe8WmK8RWXf/djYPweeuEadVYW6qOC', 1)
+                `).run(safeTechId, safeTechId, safeEmail, safeName, safeEmpId);
+                tech = { id: safeTechId, full_name: safeName, employee_id: safeEmpId };
+              } catch {
+                tech = db.prepare('SELECT * FROM users LIMIT 1').get() as any;
+              }
+            }
+            const effectiveTechId = tech ? tech.id : technicianId;
+
             const settings = (db.prepare('SELECT * FROM system_settings WHERE id = 1').get() as any) || {
               default_expected_start_time: '08:00',
               grace_period_minutes: 5,
             };
 
-            const techName = tech ? tech.full_name : 'Field Technician';
-            const employeeId = tech ? tech.employee_id : 'EMP-UNKNOWN';
+            const techName = tech ? tech.full_name : (body.technicianName || 'Field Technician');
+            const employeeId = tech ? tech.employee_id : (body.employeeId || 'EMP-UNKNOWN');
             const expectedStartTime = tech?.custom_expected_start_time || settings.default_expected_start_time || '08:00';
             const graceMinutes = Number(settings.grace_period_minutes) || 5;
 
@@ -696,6 +833,45 @@ export function sqliteApiPlugin(): Plugin {
             const delaySeconds = Math.max(0, Math.round((receivedTime - recordedTime) / 1000));
             const isOfflineSync = delaySeconds > 180 || Boolean(body.isOfflineExplicit);
             const submissionType = isOfflineSync ? 'OFFLINE_SYNC' : 'ONLINE';
+
+            // Process any inline base64 photos and physically save them to disk in uploads/
+            const processedPhotos = Array.isArray(photos) ? photos.map((p: any) => {
+              if (!p || typeof p !== 'object') return p;
+              const pDataUrl = p.dataUrl || p.photoBase64 || '';
+              if (pDataUrl && (pDataUrl.startsWith('data:image') || pDataUrl.length > 500)) {
+                try {
+                  const today = new Date().toISOString().split('T')[0];
+                  const todayDir = path.join(UPLOADS_DIR, today);
+                  if (!fs.existsSync(todayDir)) fs.mkdirSync(todayDir, { recursive: true });
+                  const safeType = (p.photoType || 'PPE_SELFIE').replace(/[^a-zA-Z0-9_-]/g, '');
+                  const safeId = (p.clientPhotoId || 'p-' + Date.now()).replace(/[^a-zA-Z0-9_-]/g, '');
+                  const filename = `${safeType}_${safeId}.jpg`;
+                  const targetFile = path.join(todayDir, filename);
+
+                  let buf: Buffer | null = null;
+                  if (pDataUrl.startsWith('data:image')) {
+                    const parts = pDataUrl.split(',');
+                    if (parts.length === 2) buf = Buffer.from(parts[1], 'base64');
+                  } else {
+                    buf = Buffer.from(pDataUrl, 'base64');
+                  }
+
+                  if (buf && buf.length > 0) {
+                    fs.writeFileSync(targetFile, buf);
+                    return {
+                      ...p,
+                      storageKey: `uploads/${today}/${filename}`,
+                      dataUrl: `/uploads/${today}/${filename}`,
+                      fileSizeBytes: buf.length,
+                      checksumSha256: crypto.createHash('sha256').update(buf).digest('hex')
+                    };
+                  }
+                } catch (e) {
+                  console.error('[SQLite] Error saving batch photo to disk:', e);
+                }
+              }
+              return p;
+            }) : [];
 
             const effectiveWorkDate = workDate || clockIn.recordedAt.split('T')[0];
             const reportId = 'rep-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
@@ -719,7 +895,7 @@ export function sqliteApiPlugin(): Plugin {
             `).run(
               reportId,
               clientReportId,
-              technicianId,
+              effectiveTechId,
               techName,
               employeeId,
               effectiveWorkDate,
@@ -735,7 +911,7 @@ export function sqliteApiPlugin(): Plugin {
               Number(clockIn.accuracyMeters || 0),
               clockIn.rawGpsTimestamp || null,
               clockIn.deviceMonotonicUptimeMs || null,
-              JSON.stringify(photos || []),
+              JSON.stringify(processedPhotos),
               JSON.stringify(ehsAnswers || []),
               generalComments || null,
               identifiedHazards || null
@@ -771,6 +947,66 @@ export function sqliteApiPlugin(): Plugin {
               data: report ? formatReportRow(report) : null,
               meta: { today, defaultExpectedStartTime: settings.default_expected_start_time || '08:00' },
             });
+          }
+
+          // 8B. EHS Hazards & Incidents reporting
+          if (pathname === '/api/v1/ehs/incidents' && method === 'GET') {
+            const techId = queryParams.get('technicianId');
+            let incidents: any[];
+            if (techId && techId !== 'ALL') {
+              incidents = db.prepare('SELECT * FROM ehs_incidents WHERE technician_id = ? ORDER BY created_at DESC').all(techId);
+            } else {
+              incidents = db.prepare('SELECT * FROM ehs_incidents ORDER BY created_at DESC LIMIT 100').all();
+            }
+            return json({ success: true, data: incidents });
+          }
+
+          if (pathname === '/api/v1/ehs/incidents' && method === 'POST') {
+            const body = await readBody();
+            const id = body.id || 'inc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+            const techId = body.technicianId || 'tech-01';
+            const techName = body.technicianName || 'Field Technician';
+            const title = body.title || 'Field Hazard / Incident';
+            const type = body.incidentType || 'HAZARD';
+            const risk = body.riskLevel || 'MEDIUM';
+            const desc = body.description || '';
+            const action = body.immediateActionTaken || '';
+            const lat = body.latitude !== undefined ? Number(body.latitude) : null;
+            const lng = body.longitude !== undefined ? Number(body.longitude) : null;
+            let photoUrl = body.photoUrl || body.photoBase64 || body.photoDataUrl || body.dataUrl || null;
+
+            if (photoUrl && (photoUrl.startsWith('data:image') || photoUrl.length > 500)) {
+              try {
+                const today = new Date().toISOString().split('T')[0];
+                const todayDir = path.join(UPLOADS_DIR, today);
+                if (!fs.existsSync(todayDir)) fs.mkdirSync(todayDir, { recursive: true });
+                const filename = `INCIDENT_${id}.jpg`;
+                const targetFile = path.join(todayDir, filename);
+                let buf: Buffer | null = null;
+                if (photoUrl.startsWith('data:image')) {
+                  const parts = photoUrl.split(',');
+                  if (parts.length === 2) buf = Buffer.from(parts[1], 'base64');
+                } else {
+                  buf = Buffer.from(photoUrl, 'base64');
+                }
+                if (buf && buf.length > 0) {
+                  fs.writeFileSync(targetFile, buf);
+                  photoUrl = `/uploads/${today}/${filename}`;
+                }
+              } catch (e) {
+                console.error('[SQLite] Error saving incident photo:', e);
+              }
+            }
+
+            db.prepare(`
+              INSERT INTO ehs_incidents (
+                id, technician_id, technician_name, title, incident_type, risk_level,
+                description, immediate_action_taken, latitude, longitude, photo_url, status
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
+            `).run(id, techId, techName, title, type, risk, desc, action, lat, lng, photoUrl);
+
+            logAudit(db, techId, techName, 'EHS_INCIDENT_REPORTED', 'INCIDENT', id, { title, risk, type });
+            return json({ success: true, data: { id, status: 'OPEN' } }, 201);
           }
 
           // 9. Admin dashboard summary

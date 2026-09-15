@@ -1,18 +1,26 @@
 package com.fieldpulse.app.ui.screens
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -20,17 +28,23 @@ import com.fieldpulse.app.data.model.IncidentType
 import com.fieldpulse.app.data.model.RiskLevel
 import com.fieldpulse.app.ui.FieldPulseViewModel
 import com.fieldpulse.app.ui.theme.Amber500
+import com.fieldpulse.app.ui.theme.Emerald600
 import com.fieldpulse.app.ui.theme.Rose600
+import com.fieldpulse.app.util.PhotoUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EHSReportScreen(viewModel: FieldPulseViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var immediateAction by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(IncidentType.HAZARD_IDENTIFIED) }
     var selectedRisk by remember { mutableStateOf(RiskLevel.MEDIUM) }
     var submittedMessage by remember { mutableStateOf<String?>(null) }
+    var attachedPhotoBase64 by remember { mutableStateOf<String?>(null) }
 
     val scrollState = rememberScrollState()
 
@@ -135,15 +149,59 @@ fun EHSReportScreen(viewModel: FieldPulseViewModel) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Camera capture button (simulated or CameraX)
-        OutlinedButton(
-            onClick = { /* Launch CameraX */ },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Attach Site Photo (CameraX)")
+        // Camera capture button & preview
+        if (attachedPhotoBase64 != null) {
+            val bitmap = remember(attachedPhotoBase64) { PhotoUtils.decodeBase64Bitmap(attachedPhotoBase64) }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Incident Evidence Photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    IconButton(
+                        onClick = { attachedPhotoBase64 = null },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.7f))
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Remove Photo", tint = Color.White)
+                    }
+                }
+            }
+        } else {
+            OutlinedButton(
+                onClick = {
+                    val photoBase64 = PhotoUtils.generateEvidencePhotoBase64(
+                        context = context,
+                        requirement = PhotoRequirement.PPE,
+                        technicianName = uiState.currentTechnician.name,
+                        employeeCode = uiState.currentTechnician.employeeCode,
+                        assignedSite = uiState.currentTechnician.assignedSite,
+                        latitude = uiState.currentLatitude,
+                        longitude = uiState.currentLongitude,
+                        accuracyMeters = uiState.gpsAccuracyMeters
+                    )
+                    attachedPhotoBase64 = photoBase64
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Attach Site Photo Evidence")
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -156,11 +214,13 @@ fun EHSReportScreen(viewModel: FieldPulseViewModel) {
                         type = selectedType,
                         risk = selectedRisk,
                         description = description,
-                        actionTaken = immediateAction
+                        actionTaken = immediateAction,
+                        photoDataUrl = attachedPhotoBase64
                     )
                     title = ""
                     description = ""
                     immediateAction = ""
+                    attachedPhotoBase64 = null
                     submittedMessage = "Report logged and queued for synchronization."
                 }
             },

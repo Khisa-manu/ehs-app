@@ -1,6 +1,7 @@
 package com.fieldpulse.app.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -31,6 +35,7 @@ import com.fieldpulse.app.ui.FieldPulseViewModel
 import com.fieldpulse.app.ui.theme.Amber500
 import com.fieldpulse.app.ui.theme.Emerald600
 import com.fieldpulse.app.ui.theme.Rose600
+import com.fieldpulse.app.util.PhotoUtils
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -537,20 +542,31 @@ fun PhotoStepView(
             Spacer(modifier = Modifier.height(20.dp))
 
             if (photoUri != null) {
+                val decodedBitmap = remember(photoUri) { PhotoUtils.decodeBase64Bitmap(photoUri) }
+
                 // Photo Captured Preview Card
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp)
+                        .height(230.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color(0xFF020617))
                         .border(1.dp, Emerald600.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
                 ) {
-                    // Simulated photo viewfinder canvas
+                    if (decodedBitmap != null) {
+                        Image(
+                            bitmap = decodedBitmap.asImageBitmap(),
+                            contentDescription = requirement.category,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    // Watermark & status HUD overlay
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(16.dp),
+                            .padding(12.dp),
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
@@ -561,23 +577,30 @@ fun PhotoStepView(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Emerald600.copy(alpha = 0.2f))
+                                    .background(Color.Black.copy(alpha = 0.75f))
                                     .border(1.dp, Emerald600, RoundedCornerShape(8.dp))
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Emerald600, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("CAPTURED & STAMPED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Emerald600)
+                                    Text("EVIDENCE STAMPED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Emerald600)
                                 }
                             }
 
-                            Text(
-                                text = "SHA-256 SIGNED",
-                                fontSize = 9.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color(0xFF64748B)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color.Black.copy(alpha = 0.75f))
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = "JPEG COMPRESSED & SIGNED",
+                                    fontSize = 9.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Color(0xFFCBD5E1)
+                                )
+                            }
                         }
 
                         // Watermark Stamp display
@@ -585,26 +608,28 @@ fun PhotoStepView(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color.Black.copy(alpha = 0.75f))
-                                .padding(10.dp)
+                                .background(Color.Black.copy(alpha = 0.85f))
+                                .border(1.dp, Amber500.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
+                                .padding(8.dp)
                         ) {
                             Text(
-                                text = "WATERMARK EVIDENCE: ${requirement.name}",
+                                text = "CATEGORY: ${requirement.category}",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Amber500,
                                 fontFamily = FontFamily.Monospace
                             )
                             Text(
-                                text = photoUri,
-                                fontSize = 11.sp,
+                                text = "PAYLOAD: ${if (photoUri.length > 40) photoUri.take(38) + "..." else photoUri}",
+                                fontSize = 10.sp,
                                 color = Color.White,
                                 fontFamily = FontFamily.Monospace
                             )
                             Text(
-                                text = "GPS: 29.7604° N, 95.3698° W • ACCURACY: ±4.2m",
+                                text = "READY FOR PHP/MYSQL BATCH UPLOAD",
                                 fontSize = 9.sp,
-                                color = Color(0xFF94A3B8),
+                                color = Emerald600,
+                                fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
                             )
                         }
@@ -1262,6 +1287,7 @@ fun CameraViewfinderModal(
             }
 
             // Bottom Shutter Button Controls
+            val context = LocalContext.current
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1280,8 +1306,17 @@ fun CameraViewfinderModal(
                         .background(Color.White)
                         .clickable {
                             isFlashing = true
-                            val generatedStamp = "STAMP-${requirement.name}-${System.currentTimeMillis()}"
-                            onCaptured(generatedStamp)
+                            val generatedDataUrl = PhotoUtils.generateEvidencePhotoBase64(
+                                context = context,
+                                requirement = requirement,
+                                technicianName = uiState.currentTechnician.name,
+                                employeeCode = uiState.currentTechnician.employeeCode,
+                                assignedSite = uiState.currentTechnician.assignedSite,
+                                latitude = uiState.currentLatitude,
+                                longitude = uiState.currentLongitude,
+                                accuracyMeters = uiState.gpsAccuracyMeters
+                            )
+                            onCaptured(generatedDataUrl)
                         }
                 )
             }
