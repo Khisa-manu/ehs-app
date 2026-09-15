@@ -51,7 +51,8 @@ object PhotoUtils {
     fun generateIncidentPhotoBase64(
         context: Context,
         incidentTitle: String,
-        category: String,
+        category: String = "INCIDENT",
+        riskLevel: String = "",
         technicianName: String,
         employeeCode: String,
         assignedSite: String,
@@ -60,9 +61,10 @@ object PhotoUtils {
         accuracyMeters: Float,
         sourceBitmap: Bitmap? = null
     ): String {
+        val displayTag = (if (riskLevel.isNotBlank()) riskLevel else category).uppercase(Locale.US)
         return createWatermarkedJpegBase64(
             headerTag = "SPECTRUM EHS INCIDENT EVIDENCE",
-            categoryTag = category.uppercase(Locale.US),
+            categoryTag = displayTag,
             labelTag = incidentTitle.take(30),
             reqName = "EHS_INCIDENT",
             technicianName = technicianName,

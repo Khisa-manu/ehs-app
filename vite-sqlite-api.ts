@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { Plugin, ViteDevServer } from 'vite';
+import type { Plugin, ViteDevServer, PreviewServer } from 'vite';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'node:crypto';
@@ -246,24 +246,21 @@ function formatReportRow(row: any) {
   };
 }
 
-export function sqliteApiPlugin(): Plugin {
+export function createSqliteApiMiddleware() {
   let db: DatabaseSync | null = null;
+  const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 
-  return {
-    name: 'vite-sqlite-api-plugin',
-    configureServer(server: ViteDevServer) {
-      try {
-        db = initSqliteDatabase();
-      } catch (e) {
-        console.error('[SQLite] Failed to initialize SQLite database:', e);
-      }
+  try {
+    db = initSqliteDatabase();
+  } catch (e) {
+    console.error('[SQLite] Failed to initialize SQLite database:', e);
+  }
 
-      const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
-      if (!fs.existsSync(UPLOADS_DIR)) {
-        fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-      }
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
 
-      server.middlewares.use(async (req, res, next) => {
+  return async (req: any, res: any, next: any) => {
         const url = req.url || '';
         const method = req.method || 'GET';
 
@@ -323,16 +320,20 @@ export function sqliteApiPlugin(): Plugin {
 
         // Helper to read JSON body
         const readBody = (): Promise<any> => {
+          if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+            return Promise.resolve(req.body);
+          }
           return new Promise((resolve) => {
             let body = '';
-            req.on('data', (chunk) => { body += chunk; });
+            req.on('data', (chunk: any) => { body += chunk; });
             req.on('end', () => {
               try {
-                resolve(body ? JSON.parse(body) : {});
+                resolve(body ? JSON.parse(body) : (req.body || {}));
               } catch {
-                resolve({});
+                resolve(req.body || {});
               }
             });
+            req.on('error', () => resolve(req.body || {}));
           });
         };
 
@@ -359,7 +360,7 @@ export function sqliteApiPlugin(): Plugin {
           // 2A. Auth: Real Login (Supports badge ID / email + bcrypt-verified PIN)
           if (pathname === '/api/v1/auth/login' && method === 'POST') {
             const body = await readBody();
-            const credential = String(body.credential || body.email || body.badgeId || '').trim();
+            const credential = String(body.credential || body.email || body.badgeId || body.identifier || body.username || '').trim();
             const pin = String(body.pin || body.password || '').trim();
 
             if (!credential) {
@@ -1233,7 +1234,19 @@ export function sqliteApiPlugin(): Plugin {
           console.error('[SQLite API Error]', err);
           return json({ success: false, error: err.message }, 500);
         }
-      });
+  };
+}
+
+export function sqliteApiPlugin(): Plugin {
+  const middleware = createSqliteApiMiddleware();
+  return {
+    name: 'vite-sqlite-api-plugin',
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server: PreviewServer) {
+      server.middlewares.use(middleware);
     },
   };
 }
+

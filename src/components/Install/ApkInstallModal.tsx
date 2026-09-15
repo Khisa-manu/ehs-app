@@ -69,12 +69,10 @@ export const ApkInstallModal: React.FC<ApkInstallModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
-  // Use the current origin or the canonical preview URL
-  const appUrl = typeof window !== 'undefined' 
-    ? (window.location.origin.includes('localhost') 
-        ? 'https://ais-pre-a4obr4cnezdry2uul53q2x-260867469001.europe-west2.run.app' 
-        : window.location.origin)
-    : 'https://ais-pre-a4obr4cnezdry2uul53q2x-260867469001.europe-west2.run.app';
+  // Use the current origin or fallback gracefully
+  const appUrl = typeof window !== 'undefined' && window.location.origin
+    ? window.location.origin
+    : '';
 
   const manifestJsonStr = JSON.stringify(MANIFEST_CONTENT, null, 2);
   const pwaBuilderUrl = `https://www.pwabuilder.com/report?site=${encodeURIComponent(appUrl)}`;
