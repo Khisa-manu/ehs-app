@@ -26,7 +26,7 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({ onSelectReport }) =>
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'all'>('today');
+  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ON_TIME' | 'LATE'>('ALL');
   const [submissionFilter, setSubmissionFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE_SYNC'>('ALL');
   const [selectedTechId, setSelectedTechId] = useState<string>('ALL');
@@ -37,7 +37,10 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({ onSelectReport }) =>
   const filteredReports = useMemo(() => {
     return reports.filter((report) => {
       // Date Filter
-      if (dateFilter === 'today' && report.workDate !== todayStr) return false;
+      if (dateFilter === 'today') {
+        const isToday = report.workDate === todayStr || Math.abs(new Date(report.officialClockInTime).getTime() - Date.now()) < 24 * 3600 * 1000;
+        if (!isToday) return false;
+      }
       if (dateFilter === 'yesterday' && report.workDate !== yesterdayStr) return false;
 
       // Status Filter

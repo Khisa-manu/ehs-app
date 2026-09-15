@@ -181,20 +181,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshUsers = useCallback(async () => {
     if (!isNetworkOnline) return;
     try {
-      const res = await fetch('/api/v1/technicians');
-      const data = await res.json();
-      if (data.success) {
-        // also include admin
-        const admin: User = {
-          id: 'usr-admin-01',
-          email: 'rachel.hayes@fieldpulse.com',
-          fullName: 'Rachel Hayes',
-          role: 'SUPER_ADMIN',
-          phoneNumber: '(415) 555-0199',
-          isActive: true,
-          createdAt: '2024-11-01T08:00:00Z',
-        };
-        setAllUsers([...data.data, admin]);
+      const res = await fetch('/api/v1/users');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          setAllUsers(data.data);
+          return;
+        }
+      }
+      // Fallback to /api/v1/technicians if needed
+      const techRes = await fetch('/api/v1/technicians');
+      if (techRes.ok) {
+        const techData = await techRes.json();
+        if (techData.success) {
+          const admin: User = {
+            id: 'usr-admin-01',
+            email: 'rachel.hayes@spectrum-ehs.com',
+            fullName: 'Rachel Hayes',
+            role: 'SUPER_ADMIN',
+            employeeId: 'SE-ADMIN-01',
+            phoneNumber: '(415) 555-0199',
+            isActive: true,
+            createdAt: '2024-11-01T08:00:00Z',
+          };
+          setAllUsers([...techData.data, admin]);
+        }
       }
     } catch (err) {
       console.warn('Network offline or fetch failed for technicians', err);
@@ -204,7 +215,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshDashboard = useCallback(async () => {
     if (!isNetworkOnline) return;
     try {
-      const [sumRes, repRes, ehsRes, setRes, logsRes] = await Promise.all([
+      const [sumRes, repRes, ehsRes, setRes, logsRes] = await Promise.allSettled([
         fetch('/api/v1/admin/dashboard/summary'),
         fetch('/api/v1/admin/reports'),
         fetch('/api/v1/ehs/questions'),
@@ -212,27 +223,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetch('/api/v1/admin/audit-logs'),
       ]);
 
-      const [sumData, repData, ehsData, setData, logsData] = await Promise.all([
-        sumRes.json(),
-        repRes.json(),
-        ehsRes.json(),
-        setRes.json(),
-        logsRes.json(),
-      ]);
+      if (sumRes.status === 'fulfilled' && sumRes.value.ok) {
+        try {
+          const sumData = await sumRes.value.json();
+          if (sumData.success) setSummary(sumData.data);
+        } catch { /* ignore parse err */ }
+      }
 
-      if (sumData.success) setSummary(sumData.data);
-      if (repData.success) setReports(repData.data);
-      if (ehsData.success) setEhsQuestions(ehsData.data);
-      if (setData.success) setSettings(setData.data);
-      if (logsData.success) setAuditLogs(logsData.data);
+      if (repRes.status === 'fulfilled' && repRes.value.ok) {
+        try {
+          const repData = await repRes.value.json();
+          if (repData.success && Array.isArray(repData.data)) {
+            setReports(repData.data);
 
-      // check today report for currentUser
-      if (currentUser && currentUser.id) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const currentToday = repData.data?.find(
-          (r: DailyReport) => r.technicianId === currentUser.id && r.workDate === todayStr
-        );
-        setTodayReport(currentToday || null);
+            // check today report for currentUser
+            if (currentUser && currentUser.id) {
+              const todayStr = new Date().toISOString().split('T')[0];
+              const now = Date.now();
+              const currentToday = repData.data.find(
+                (r: DailyReport) => r.technicianId === currentUser.id && (
+                  r.workDate === todayStr ||
+                  Math.abs(new Date(r.officialClockInTime).getTime() - now) < 24 * 3600 * 1000
+                )
+              );
+              setTodayReport(currentToday || null);
+            }
+          }
+        } catch { /* ignore parse err */ }
+      }
+
+      if (ehsRes.status === 'fulfilled' && ehsRes.value.ok) {
+        try {
+          const ehsData = await ehsRes.value.json();
+          if (ehsData.success) setEhsQuestions(ehsData.data);
+        } catch { /* ignore parse err */ }
+      }
+
+      if (setRes.status === 'fulfilled' && setRes.value.ok) {
+        try {
+          const setData = await setRes.value.json();
+          if (setData.success) setSettings(setData.data);
+        } catch { /* ignore parse err */ }
+      }
+
+      if (logsRes.status === 'fulfilled' && logsRes.value.ok) {
+        try {
+          const logsData = await logsRes.value.json();
+          if (logsData.success) setAuditLogs(logsData.data);
+        } catch { /* ignore parse err */ }
       }
     } catch (err) {
       console.warn('Network offline or error fetching dashboard', err);
@@ -249,9 +287,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isNetworkOnline) {
         refreshDashboard();
       }
-    }, 6000);
+    }, 4000);
 
-    return () => clearInterval(pollInterval);
+    // Also immediately refresh when window/tab is focused or visible
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && isNetworkOnline) {
+        refreshDashboard();
+        refreshUsers();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
   }, [refreshUsers, refreshDashboard, isNetworkOnline]);
 
   // Network simulator toggle

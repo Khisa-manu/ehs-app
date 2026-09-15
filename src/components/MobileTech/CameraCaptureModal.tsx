@@ -8,9 +8,10 @@ import {
   MapPin, 
   Clock, 
   ShieldCheck, 
-  Zap, 
   SwitchCamera,
   AlertCircle,
+  Smartphone,
+  Upload,
   Sparkles
 } from 'lucide-react';
 
@@ -34,14 +35,14 @@ const PHOTO_CONFIG: Record<PhotoType, {
   PPE_SELFIE: {
     title: 'PPE Verification Selfie',
     subtitle: 'Hard hat, safety glasses, high-vis vest',
-    guideText: 'Align your face and upper torso inside the frame with hard hat and eye protection clearly visible.',
+    guideText: 'Position your face and upper torso inside the frame with hard hat and eye protection clearly visible.',
     fallbackSampleUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=800&q=85',
     guideShape: 'oval',
   },
   TOOL_CHECK: {
     title: 'Tool & Equipment Inspection',
     subtitle: 'Inspect guards, cord integrity, and tags',
-    guideText: 'Place power tools on a clean surface showing safety guard and undamaged power lead.',
+    guideText: 'Photograph power tools on a clean surface showing safety guard and undamaged power lead.',
     fallbackSampleUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=85',
     guideShape: 'rect',
   },
@@ -92,10 +93,12 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const config = PHOTO_CONFIG[photoType] || PHOTO_CONFIG.PPE_SELFIE;
 
-  // Fetch device geolocation
+  // Fetch real device geolocation
   useEffect(() => {
     if (isOpen) {
       if ('geolocation' in navigator) {
@@ -108,15 +111,92 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             });
           },
           (err) => {
-            console.warn('Geolocation warning (using high-accuracy fallback):', err.message);
+            console.warn('Geolocation fallback:', err.message);
           },
-          { enableHighAccuracy: true, timeout: 5000 }
+          { enableHighAccuracy: true, timeout: 6000 }
         );
       }
     }
   }, [isOpen]);
 
-  // Attempt live camera stream if available
+  const stopCameraStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const startCameraStream = async () => {
+    stopCameraStream();
+    setCameraError(null);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setUseLiveVideo(false);
+      setCameraError('Camera API not accessible in this browser. Use Phone Camera.');
+      return;
+    }
+
+    let stream: MediaStream | null = null;
+    try {
+      // 1. Try preferred facing mode with optimal resolution
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: cameraFacing,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+    } catch {
+      try {
+        // 2. Fallback: Relaxed facing mode without resolution constraints
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: cameraFacing },
+          audio: false,
+        });
+      } catch {
+        try {
+          // 3. Fallback: Any available video device
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        } catch (err: any) {
+          console.warn('Camera stream error:', err);
+          setUseLiveVideo(false);
+          setCameraError(err?.message || 'Camera permission required or blocked.');
+          return;
+        }
+      }
+    }
+
+    if (stream) {
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        try {
+          await videoRef.current.play();
+        } catch (e) {
+          console.warn('Video play error:', e);
+        }
+      }
+      setUseLiveVideo(true);
+      setCameraError(null);
+    }
+  };
+
+  // Reconnect video when videoRef mounts or stream updates
+  useEffect(() => {
+    if (videoRef.current && streamRef.current && useLiveVideo) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [useLiveVideo]);
+
+  // Manage camera lifecycle
   useEffect(() => {
     if (!isOpen) {
       stopCameraStream();
@@ -131,89 +211,125 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     };
   }, [isOpen, cameraFacing]);
 
-  const startCameraStream = async () => {
-    try {
-      stopCameraStream();
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setUseLiveVideo(false);
-        return;
-      }
+  // Stamp official EHS watermark on image buffer
+  const applyWatermarkToCanvas = (canvas: HTMLCanvasElement, nowIso: string) => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: cameraFacing,
-          width: { ideal: 1280 },
-          height: { ideal: 960 },
-        },
-        audio: false,
-      });
+    const w = canvas.width;
+    const h = canvas.height;
+    const bannerH = Math.max(52, Math.round(h * 0.085));
 
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-      setUseLiveVideo(true);
-      setCameraError(null);
-    } catch (err: any) {
-      console.log('Webcam not active or permission denied in sandbox; using certified field photo simulator', err);
-      setUseLiveVideo(false);
-      setCameraError('Camera stream accessed via field simulation mode.');
-    }
+    // Dark gradient background band
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+    ctx.fillRect(0, h - bannerH, w, bannerH);
+
+    // Red corporate accent stripe
+    ctx.fillStyle = '#D32F2F';
+    ctx.fillRect(0, h - bannerH, w, Math.max(3, Math.round(bannerH * 0.05)));
+
+    // Line 1: Primary EHS Verification Header
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${Math.max(12, Math.round(bannerH * 0.28))}px monospace`;
+    ctx.fillText(
+      `SPECTRUM EHS • ${employeeId} • ${photoType.replace('_', ' ')} • VERIFIED`,
+      14,
+      h - Math.round(bannerH * 0.54)
+    );
+
+    // Line 2: GPS Telemetry & UTC Timestamp
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = `${Math.max(10, Math.round(bannerH * 0.22))}px monospace`;
+    ctx.fillText(
+      `GPS: ${capturedGps.lat.toFixed(5)}, ${capturedGps.lng.toFixed(5)} (±${capturedGps.accuracy}m) • ${nowIso.substring(0, 19)}Z`,
+      14,
+      h - Math.round(bannerH * 0.18)
+    );
   };
 
-  const stopCameraStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-  };
-
-  // Capture Photo Action
+  // Capture from live video stream
   const handleTriggerShutter = () => {
-    // Flash effect
     setIsFlashActive(true);
     setTimeout(() => setIsFlashActive(false), 200);
 
     const nowIso = new Date().toISOString();
     setCapturedTimestamp(nowIso);
 
-    // If live video is running, capture from canvas
-    if (useLiveVideo && videoRef.current && canvasRef.current) {
+    if (useLiveVideo && videoRef.current) {
       const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      const canvas = canvasRef.current || document.createElement('canvas');
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        // Add immutable timestamp & GPS watermark directly into pixel buffer
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-        ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 12px monospace';
-        ctx.fillText(
-          `FIELDPULSE EHS • ${employeeId} • ${capturedGps.lat.toFixed(5)}, ${capturedGps.lng.toFixed(5)} • ${nowIso.substring(0, 19)}Z`,
-          10,
-          canvas.height - 15
-        );
-
+        applyWatermarkToCanvas(canvas, nowIso);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setCapturedPreview(dataUrl);
         return;
       }
     }
 
-    // High-resolution verified field sample fallback
+    // If live video is not streaming, trigger the native phone camera input directly
+    if (nativeCameraInputRef.current) {
+      nativeCameraInputRef.current.click();
+      return;
+    }
+
+    // High-resolution verified fallback
     setCapturedPreview(config.fallbackSampleUrl);
+  };
+
+  // Handle native phone camera or gallery file selection
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawDataUrl = event.target?.result as string;
+      if (!rawDataUrl) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const canvas = canvasRef.current || document.createElement('canvas');
+        const maxDim = 1280;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const nowIso = new Date().toISOString();
+          setCapturedTimestamp(nowIso);
+          applyWatermarkToCanvas(canvas, nowIso);
+          const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setCapturedPreview(watermarkedUrl);
+        } else {
+          setCapturedPreview(rawDataUrl);
+        }
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+    // Reset input value so same file can be re-selected if needed
+    e.target.value = '';
   };
 
   const handleRetake = () => {
     setCapturedPreview(null);
-    if (useLiveVideo) {
-      startCameraStream();
-    }
+    startCameraStream();
   };
 
   const handleConfirmPhoto = () => {
@@ -225,7 +341,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       photoType,
       storageKey: `uploads/${new Date().toISOString().split('T')[0]}/${photoType.toLowerCase()}_${Date.now()}.jpg`,
       dataUrl: capturedPreview,
-      fileSizeBytes: 620000,
+      fileSizeBytes: Math.round((capturedPreview.length * 3) / 4),
       mimeType: 'image/jpeg',
       checksumSha256: Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2),
       capturedAt: capturedTimestamp || new Date().toISOString(),
@@ -242,8 +358,25 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-2 sm:p-4">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[94vh]">
         
+        {/* Hidden inputs for 100% native mobile camera and gallery triggers */}
+        <input
+          ref={nativeCameraInputRef}
+          type="file"
+          accept="image/*"
+          capture={cameraFacing === 'user' ? 'user' : 'environment'}
+          onChange={handleFileSelected}
+          className="hidden"
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileSelected}
+          className="hidden"
+        />
+
         {/* Top Header */}
         <div className="flex items-center justify-between p-4 bg-slate-900/95 border-b border-slate-800 text-white">
           <div>
@@ -276,7 +409,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               <img
                 src={capturedPreview}
                 alt={config.title}
-                className="w-full h-full object-cover max-h-[440px]"
+                className="w-full h-full object-contain max-h-[440px]"
               />
 
               {/* Watermark badge on review */}
@@ -297,56 +430,92 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3 text-slate-300" />
-                    {capturedTimestamp.substring(11, 19)} UTC
+                    {capturedTimestamp ? capturedTimestamp.substring(11, 19) : new Date().toISOString().substring(11, 19)} UTC
                   </span>
                 </div>
               </div>
             </div>
           ) : (
-            /* Live Camera / High-Fidelity Simulator */
+            /* Live Camera / Native Camera Trigger */
             <div className="relative w-full h-full flex items-center justify-center">
-              {useLiveVideo ? (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="relative w-full h-full">
+              
+              {/* Always mount video tag so videoRef is never null */}
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full h-full object-cover ${useLiveVideo ? 'block' : 'hidden'}`}
+              />
+
+              {!useLiveVideo && (
+                <div className="relative w-full h-full flex flex-col items-center justify-center p-6 text-center bg-slate-950">
                   <img
                     src={config.fallbackSampleUrl}
-                    alt="Camera Guide View"
-                    className="w-full h-full object-cover filter brightness-90"
+                    alt="Sample Guide"
+                    className="absolute inset-0 w-full h-full object-cover opacity-25 filter blur-[1px]"
                   />
-                  <div className="absolute top-3 left-3 bg-slate-900/85 backdrop-blur-xs text-red-300 text-[10px] font-mono px-2 py-0.5 rounded border border-red-500/30">
-                    LIVE FIELD VIEWFINDER
+                  
+                  <div className="relative z-10 max-w-xs space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-red-600/20 border border-red-500/40 text-red-400 flex items-center justify-center mx-auto shadow-lg">
+                      <Camera className="w-8 h-8" />
+                    </div>
+
+                    <div>
+                      <h4 className="text-white font-bold text-sm">
+                        {config.title}
+                      </h4>
+                      <p className="text-slate-300 text-xs mt-1 leading-relaxed">
+                        {cameraError 
+                          ? 'Browser webcam permission is restricted. Tap below to capture with your device camera app:'
+                          : config.guideText}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => nativeCameraInputRef.current?.click()}
+                      className="w-full py-3 px-4 rounded-xl bg-[#D32F2F] hover:bg-[#B71C1C] active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-900/40 transition-all cursor-pointer"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>Take Photo with Camera</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => galleryInputRef.current?.click()}
+                      className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Select Photo from Gallery</span>
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Viewfinder Overlays / Alignment Guides */}
-              <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
-                {config.guideShape === 'oval' && (
-                  <div className="w-48 h-64 border-2 border-dashed border-red-400/80 rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
-                )}
-                {config.guideShape === 'rect' && (
-                  <div className="w-64 h-48 border-2 border-dashed border-red-400/80 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
-                )}
-                {config.guideShape === 'ladder' && (
-                  <div className="w-44 h-72 border-2 border-dashed border-red-400/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.4)] flex flex-col justify-around py-4">
-                    <div className="w-full border-b border-red-300/40" />
-                    <div className="w-full border-b border-red-300/40" />
-                    <div className="w-full border-b border-red-300/40" />
-                  </div>
-                )}
-                
-                {/* Center guidance text */}
-                <p className="mt-4 text-center text-xs font-medium text-white/90 bg-slate-900/80 px-3.5 py-1 rounded-full backdrop-blur-xs max-w-xs shadow-xs">
-                  {config.guideText}
-                </p>
-              </div>
+              {/* Viewfinder Overlays / Alignment Guides (when live) */}
+              {useLiveVideo && (
+                <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
+                  {config.guideShape === 'oval' && (
+                    <div className="w-48 h-64 border-2 border-dashed border-red-400/80 rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
+                  )}
+                  {config.guideShape === 'rect' && (
+                    <div className="w-64 h-48 border-2 border-dashed border-red-400/80 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
+                  )}
+                  {config.guideShape === 'ladder' && (
+                    <div className="w-44 h-72 border-2 border-dashed border-red-400/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.4)] flex flex-col justify-around py-4">
+                      <div className="w-full border-b border-red-300/40" />
+                      <div className="w-full border-b border-red-300/40" />
+                      <div className="w-full border-b border-red-300/40" />
+                    </div>
+                  )}
+                  
+                  {/* Center guidance text */}
+                  <p className="mt-4 text-center text-xs font-medium text-white/90 bg-slate-900/80 px-3.5 py-1 rounded-full backdrop-blur-xs max-w-xs shadow-xs">
+                    {config.guideText}
+                  </p>
+                </div>
+              )}
 
               {/* Real-time telemetry badges */}
               <div className="absolute top-3 right-3 flex items-center gap-1.5">
@@ -358,7 +527,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             </div>
           )}
 
-          {/* Hidden Canvas for Video Freeze Capture */}
+          {/* Hidden Canvas for Watermark Processing */}
           <canvas ref={canvasRef} className="hidden" />
         </div>
 
@@ -368,7 +537,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={handleRetake}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white font-semibold text-sm transition-all border border-slate-700 cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400"
+                className="flex-1 flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white font-semibold text-xs sm:text-sm transition-all border border-slate-700 cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4 text-slate-300" />
                 <span>Retake Photo</span>
@@ -376,39 +545,45 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
               <button
                 onClick={handleConfirmPhoto}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl bg-[#D32F2F] hover:bg-[#B71C1C] active:bg-[#991B1B] active:scale-[0.98] text-white font-bold text-sm shadow-md shadow-red-950 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-red-500"
+                className="flex-1 flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-[#D32F2F] hover:bg-[#B71C1C] active:bg-[#991B1B] active:scale-[0.98] text-white font-bold text-xs sm:text-sm shadow-md shadow-red-950 transition-all cursor-pointer"
               >
                 <Check className="w-4 h-4" />
                 <span>Accept & Verify</span>
               </button>
             </div>
           ) : (
-            <div className="flex items-center justify-between px-4">
+            <div className="flex items-center justify-between px-2 sm:px-4">
               
-              {/* Switch camera mode button */}
+              {/* Flip camera between selfie and environment */}
               <button
                 onClick={() => setCameraFacing(prev => prev === 'user' ? 'environment' : 'user')}
-                className="p-2.5 rounded-full bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
+                className="p-3 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
                 title="Flip Camera"
               >
-                <SwitchCamera className="w-5 h-5" />
+                <SwitchCamera className="w-4 h-4" />
+                <span className="hidden sm:inline">{cameraFacing === 'user' ? 'Front' : 'Rear'}</span>
               </button>
 
               {/* Main Shutter Button */}
               <button
                 onClick={handleTriggerShutter}
-                className="w-16 h-16 rounded-full border-4 border-[#D32F2F] p-1 flex items-center justify-center group active:scale-95 transition-transform cursor-pointer shadow-md shadow-red-600/30"
+                className="w-16 h-16 rounded-full border-4 border-[#D32F2F] p-1 flex items-center justify-center group active:scale-95 transition-transform cursor-pointer shadow-lg shadow-red-600/30"
                 title="Capture Photo"
               >
                 <div className="w-full h-full bg-white rounded-full group-hover:bg-[#FFEBEE] transition-colors flex items-center justify-center">
-                  <Camera className="w-6 h-6 text-[#D32F2F]" />
+                  <Camera className="w-7 h-7 text-[#D32F2F]" />
                 </div>
               </button>
 
-              {/* Guidance icon */}
-              <div className="p-2.5 text-slate-500">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-              </div>
+              {/* Direct phone native camera launch button */}
+              <button
+                onClick={() => nativeCameraInputRef.current?.click()}
+                className="p-3 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                title="Use Phone Camera App"
+              >
+                <Smartphone className="w-4 h-4 text-[#D32F2F]" />
+                <span className="hidden sm:inline">Native</span>
+              </button>
             </div>
           )}
         </div>

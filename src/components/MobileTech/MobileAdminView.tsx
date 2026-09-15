@@ -239,7 +239,7 @@ export const MobileAdminView: React.FC<MobileAdminViewProps> = ({ onSwitchToTech
                         {report.technicianName}
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono">
-                        {report.technicianEmployeeId}
+                        {report.employeeId || 'SE-TECH'}
                       </div>
                     </div>
                   </div>

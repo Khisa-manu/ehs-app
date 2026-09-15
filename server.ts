@@ -107,6 +107,16 @@ app.get('/api/v1/ehs/questions', async (req, res) => {
 });
 
 // 4. Technicians List & Management from PostgreSQL
+app.get('/api/v1/users', async (req, res) => {
+  try {
+    const allUsers = await dbRepo.getAllUsers();
+    res.json({ success: true, data: allUsers });
+  } catch (error: any) {
+    console.error('Failed to get all users:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch users' });
+  }
+});
+
 app.get('/api/v1/technicians', async (req, res) => {
   try {
     const allUsers = await dbRepo.getAllUsers();
