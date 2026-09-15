@@ -42,14 +42,44 @@ class FieldPulseApiClient private constructor(private val context: Context) {
         }
 
     /**
+     * Resolves smart candidate endpoints based on the configured baseUrl.
+     * Prevents duplicate path prefixes (/api/v1/api/v1) and supports both
+     * Node/Vite Express endpoints (/api/v1/...) and cPanel PHP endpoints (/v1/... or /cpanel-backend/...).
+     */
+    fun resolveCandidateEndpoints(subPath: String): List<String> {
+        val cleanBase = baseUrl.trim().trimEnd('/')
+        val cleanPath = subPath.trim().trimStart('/')
+
+        val list = mutableListOf<String>()
+
+        // 1. Direct path from baseUrl
+        list.add("$cleanBase/$cleanPath")
+
+        // 2. Base without trailing /api or /v1 or /cpanel-backend
+        var host = cleanBase
+        for (prefix in listOf("/api/v1", "/api", "/v1", "/cpanel-backend/api/v1", "/cpanel-backend/v1", "/cpanel-backend")) {
+            if (host.endsWith(prefix)) {
+                host = host.removeSuffix(prefix).trimEnd('/')
+                break
+            }
+        }
+
+        // Standard candidates
+        list.add("$host/api/v1/$cleanPath")
+        list.add("$host/v1/$cleanPath")
+        list.add("$host/cpanel-backend/v1/$cleanPath")
+        list.add("$host/cpanel-backend/api/v1/$cleanPath")
+        list.add("$host/cpanel-backend/index.php/v1/$cleanPath")
+        list.add("$host/$cleanPath")
+
+        return list.distinct()
+    }
+
+    /**
      * Tests connectivity to the backend server.
      */
     suspend fun testConnection(): ApiResult<String> = withContext(Dispatchers.IO) {
-        val candidates = listOf(
-            "$baseUrl/v1/health",
-            "$baseUrl/api/v1/health",
-            "$baseUrl/cpanel-backend/v1/health"
-        )
+        val candidates = resolveCandidateEndpoints("health")
 
         var lastError: String? = null
         for (urlStr in candidates) {
@@ -57,24 +87,30 @@ class FieldPulseApiClient private constructor(private val context: Context) {
                 val url = URL(urlStr)
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
-                    connectTimeout = 5000
-                    readTimeout = 5000
+                    connectTimeout = 6000
+                    readTimeout = 8000
+                    instanceFollowRedirects = true
                     setRequestProperty("Accept", "application/json")
+                    setRequestProperty("User-Agent", "FieldPulse-Android/1.0")
                 }
 
                 val code = conn.responseCode
                 if (code in 200..299) {
-                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                    val response = reader.readText()
-                    reader.close()
+                    val stream = conn.inputStream
+                    val response = stream?.let { s ->
+                        BufferedReader(InputStreamReader(s, Charsets.UTF_8)).use { it.readText() }
+                    } ?: ""
                     conn.disconnect()
-                    return@withContext ApiResult.Success("Connected successfully to $urlStr (HTTP $code)")
+                    return@withContext ApiResult.Success("Connected successfully (HTTP $code)")
+                } else if (code == 302 || code == 301) {
+                    val loc = conn.getHeaderField("Location") ?: ""
+                    lastError = "Redirect HTTP $code to $loc. (If using Cloud Run, access requires browser session; use your LAN IP or cPanel host for APK)"
                 } else {
                     lastError = "HTTP $code from $urlStr"
                 }
                 conn.disconnect()
             } catch (e: Exception) {
-                lastError = "${e.javaClass.simpleName}: ${e.message}"
+                lastError = formatNetworkException(e, urlStr)
             }
         }
 
@@ -85,12 +121,7 @@ class FieldPulseApiClient private constructor(private val context: Context) {
      * Uploads an individual evidence photo directly to PHP/MySQL backend or Vite SQLite API.
      */
     suspend fun uploadPhotoDirect(photo: PhotoItemDto): ApiResult<PhotoRecordDto> = withContext(Dispatchers.IO) {
-        val candidates = listOf(
-            "$baseUrl/v1/photos/upload-direct",
-            "$baseUrl/api/v1/photos/upload-direct",
-            "$baseUrl/cpanel-backend/v1/photos/upload-direct"
-        )
-
+        val candidates = resolveCandidateEndpoints("photos/upload-direct")
         val jsonBody = gson.toJson(photo)
 
         for (endpoint in candidates) {
@@ -116,12 +147,7 @@ class FieldPulseApiClient private constructor(private val context: Context) {
      * Synchronizes a complete daily clock-in report with evidence photos and EHS audit checklist.
      */
     suspend fun syncBatchReport(payload: BatchSyncRequestDto): ApiResult<ReportResponseData> = withContext(Dispatchers.IO) {
-        val candidates = listOf(
-            "$baseUrl/v1/sync/batch",
-            "$baseUrl/api/v1/sync/batch",
-            "$baseUrl/cpanel-backend/v1/sync/batch"
-        )
-
+        val candidates = resolveCandidateEndpoints("sync/batch")
         val jsonBody = gson.toJson(payload)
         var lastError: String? = null
 
@@ -133,13 +159,13 @@ class FieldPulseApiClient private constructor(private val context: Context) {
                     if (respDto.success && respDto.data != null) {
                         return@withContext ApiResult.Success(respDto.data)
                     } else {
-                        lastError = respDto.error ?: respDto.message ?: "Batch sync failed"
+                        lastError = respDto.error ?: respDto.message ?: "Batch sync rejected by server"
                     }
                 } else if (result is ApiResult.Error) {
                     lastError = result.message
                 }
             } catch (e: Exception) {
-                lastError = "${e.javaClass.simpleName}: ${e.message}"
+                lastError = formatNetworkException(e, endpoint)
                 Log.w(TAG, "Sync batch endpoint $endpoint failed: ${e.message}")
             }
         }
@@ -151,12 +177,7 @@ class FieldPulseApiClient private constructor(private val context: Context) {
      * Reports an EHS incident or safety hazard to backend.
      */
     suspend fun submitIncident(incident: IncidentUploadDto): ApiResult<Boolean> = withContext(Dispatchers.IO) {
-        val candidates = listOf(
-            "$baseUrl/v1/ehs/incidents",
-            "$baseUrl/api/v1/ehs/incidents",
-            "$baseUrl/cpanel-backend/v1/ehs/incidents"
-        )
-
+        val candidates = resolveCandidateEndpoints("ehs/incidents")
         val jsonBody = gson.toJson(incident)
         var lastError: String? = null
 
@@ -174,7 +195,7 @@ class FieldPulseApiClient private constructor(private val context: Context) {
                     lastError = result.message
                 }
             } catch (e: Exception) {
-                lastError = "${e.javaClass.simpleName}: ${e.message}"
+                lastError = formatNetworkException(e, endpoint)
             }
         }
 
@@ -187,8 +208,9 @@ class FieldPulseApiClient private constructor(private val context: Context) {
             val url = URL(endpoint)
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                connectTimeout = 12000
-                readTimeout = 20000
+                connectTimeout = 15000
+                readTimeout = 30000
+                instanceFollowRedirects = true
                 doOutput = true
                 doInput = true
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
@@ -204,20 +226,37 @@ class FieldPulseApiClient private constructor(private val context: Context) {
             val statusCode = conn.responseCode
             val isSuccess = statusCode in 200..299
 
-            val inputStream = if (isSuccess) conn.inputStream else conn.errorStream
-            val reader = BufferedReader(InputStreamReader(inputStream ?: conn.inputStream, Charsets.UTF_8))
-            val responseText = reader.readText()
-            reader.close()
+            val stream = if (isSuccess) conn.inputStream else conn.errorStream
+            val responseText = stream?.let { s ->
+                BufferedReader(InputStreamReader(s, Charsets.UTF_8)).use { it.readText() }
+            } ?: ""
 
             if (isSuccess) {
                 ApiResult.Success(responseText)
             } else {
-                ApiResult.Error("Server returned HTTP $statusCode: $responseText", statusCode)
+                ApiResult.Error("HTTP $statusCode: $responseText", statusCode)
             }
         } catch (e: Exception) {
-            ApiResult.Error("Network error connecting to $endpoint: ${e.message}", 0, e)
+            val formatted = formatNetworkException(e, endpoint)
+            ApiResult.Error(formatted, 0, e)
         } finally {
             conn?.disconnect()
+        }
+    }
+
+    private fun formatNetworkException(e: Exception, endpoint: String): String {
+        val host = try { URL(endpoint).host } catch (_: Exception) { endpoint }
+        return when {
+            e is java.net.ConnectException && (host == "10.0.2.2" || host == "localhost") ->
+                "Connection refused to $host. Note: 10.0.2.2 is for Android Emulator only. On physical phones, set your computer's Wi-Fi LAN IP (e.g. http://192.168.x.x:3000) in Server Settings."
+            e is java.net.ConnectException ->
+                "Connection refused to $host. Ensure server is running and port 3000 is open in firewall."
+            e is java.net.SocketTimeoutException ->
+                "Connection timed out reaching $host (exceeded timeout)."
+            e is java.net.UnknownHostException ->
+                "Could not resolve host '$host'. Check device internet and URL spelling."
+            else ->
+                "${e.javaClass.simpleName}: ${e.message}"
         }
     }
 }

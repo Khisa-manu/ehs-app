@@ -1,5 +1,13 @@
 package com.fieldpulse.app.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -45,6 +54,70 @@ fun EHSReportScreen(viewModel: FieldPulseViewModel) {
     var selectedRisk by remember { mutableStateOf(RiskLevel.MEDIUM) }
     var submittedMessage by remember { mutableStateOf<String?>(null) }
     var attachedPhotoBase64 by remember { mutableStateOf<String?>(null) }
+    var photoErrorMessage by remember { mutableStateOf<String?>(null) }
+
+    val processCapturedBitmap: (Bitmap?) -> Unit = { bitmap ->
+        if (bitmap != null) {
+            photoErrorMessage = null
+            try {
+                val photoBase64 = PhotoUtils.generateIncidentPhotoBase64(
+                    context = context,
+                    incidentTitle = title.ifBlank { "EHS Safety Incident" },
+                    riskLevel = selectedRisk.name,
+                    technicianName = uiState.currentTechnician.name,
+                    employeeCode = uiState.currentTechnician.employeeCode,
+                    assignedSite = uiState.currentTechnician.assignedSite,
+                    latitude = uiState.currentLatitude,
+                    longitude = uiState.currentLongitude,
+                    accuracyMeters = uiState.gpsAccuracyMeters,
+                    sourceBitmap = bitmap
+                )
+                attachedPhotoBase64 = photoBase64
+            } catch (e: Exception) {
+                photoErrorMessage = "Failed to process photo: ${e.message}"
+            }
+        }
+    }
+
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: Bitmap? ->
+        processCapturedBitmap(bitmap)
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val stream = context.contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(stream)
+                stream?.close()
+                processCapturedBitmap(bitmap)
+            } catch (e: Exception) {
+                photoErrorMessage = "Failed reading gallery image: ${e.message}"
+            }
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            takePictureLauncher.launch(null)
+        } else {
+            photoErrorMessage = "Camera permission required. You can choose from gallery instead."
+        }
+    }
+
+    val launchRealCamera = {
+        val hasCam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasCam) {
+            takePictureLauncher.launch(null)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -181,26 +254,59 @@ fun EHSReportScreen(viewModel: FieldPulseViewModel) {
                 }
             }
         } else {
-            OutlinedButton(
-                onClick = {
-                    val photoBase64 = PhotoUtils.generateEvidencePhotoBase64(
-                        context = context,
-                        requirement = PhotoRequirement.PPE,
-                        technicianName = uiState.currentTechnician.name,
-                        employeeCode = uiState.currentTechnician.employeeCode,
-                        assignedSite = uiState.currentTechnician.assignedSite,
-                        latitude = uiState.currentLatitude,
-                        longitude = uiState.currentLongitude,
-                        accuracyMeters = uiState.gpsAccuracyMeters
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { launchRealCamera() },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Amber500),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Real Camera", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = { galleryLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Amber500, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("From Gallery", fontSize = 12.sp)
+                    }
+                }
+
+                TextButton(
+                    onClick = {
+                        val photoBase64 = PhotoUtils.generateIncidentPhotoBase64(
+                            context = context,
+                            incidentTitle = title.ifBlank { "EHS Safety Incident" },
+                            riskLevel = selectedRisk.name,
+                            technicianName = uiState.currentTechnician.name,
+                            employeeCode = uiState.currentTechnician.employeeCode,
+                            assignedSite = uiState.currentTechnician.assignedSite,
+                            latitude = uiState.currentLatitude,
+                            longitude = uiState.currentLongitude,
+                            accuracyMeters = uiState.gpsAccuracyMeters,
+                            sourceBitmap = null
+                        )
+                        attachedPhotoBase64 = photoBase64
+                    },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Text("⚡ Use Simulated Test Frame (Demo)", fontSize = 11.sp, color = Color(0xFF94A3B8))
+                }
+
+                if (photoErrorMessage != null) {
+                    Text(
+                        text = photoErrorMessage ?: "",
+                        color = Rose600,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 4.dp)
                     )
-                    attachedPhotoBase64 = photoBase64
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Attach Site Photo Evidence")
+                }
             }
         }
 

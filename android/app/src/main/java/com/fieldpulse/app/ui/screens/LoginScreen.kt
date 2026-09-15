@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fieldpulse.app.data.model.Technician
 import com.fieldpulse.app.ui.FieldPulseViewModel
+import com.fieldpulse.app.ui.components.ServerSettingsDialog
 import com.fieldpulse.app.ui.theme.Amber500
 
 @Composable
@@ -94,7 +96,29 @@ fun LoginScreen(viewModel: FieldPulseViewModel) {
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.clickable { viewModel.toggleServerSettings(true) }
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.Dns, contentDescription = null, tint = Amber500, modifier = Modifier.size(13.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Server: ${uiState.backendBaseUrl}",
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
 
         // Main Login Card
         Card(
@@ -344,6 +368,13 @@ fun LoginScreen(viewModel: FieldPulseViewModel) {
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    if (uiState.showServerSettingsDialog) {
+        ServerSettingsDialog(
+            viewModel = viewModel,
+            onDismiss = { viewModel.toggleServerSettings(false) }
+        )
     }
 }
 

@@ -469,10 +469,11 @@ class FieldPulseViewModel(application: Application) : AndroidViewModel(applicati
                     _uiState.update { it.copy(lastSyncMessage = "Report & photos synchronized live with backend.") }
                 } else {
                     // Gracefully fallback to offline pending queue
+                    val errorDetail = (result as? ApiResult.Error)?.message ?: "Server unreachable"
                     clockDao.updateRecord(record.copy(syncStatus = SyncStatus.PENDING_OFFLINE))
                     _uiState.update {
                         it.copy(
-                            lastSyncMessage = "Backend unreachable. Report queued safely for offline sync.",
+                            lastSyncMessage = "Offline queue: $errorDetail",
                             pendingSyncCount = it.pendingSyncCount + 1
                         )
                     }
@@ -564,6 +565,7 @@ class FieldPulseViewModel(application: Application) : AndroidViewModel(applicati
             val pendingClock = clockDao.getPendingOfflineRecords()
             var syncedClockCount = 0
             var failedClockCount = 0
+            var lastSyncErrorDetail: String? = null
 
             for (rec in pendingClock) {
                 val payload = buildBatchSyncPayload(rec, isOfflineExplicit = true)
@@ -588,6 +590,9 @@ class FieldPulseViewModel(application: Application) : AndroidViewModel(applicati
                     )
                 } else {
                     failedClockCount++
+                    if (result is ApiResult.Error) {
+                        lastSyncErrorDetail = result.message
+                    }
                 }
             }
 
@@ -615,6 +620,9 @@ class FieldPulseViewModel(application: Application) : AndroidViewModel(applicati
                     ehsDao.updateIncident(inc.copy(syncStatus = SyncStatus.SYNCED))
                 } else {
                     failedEhsCount++
+                    if (result is ApiResult.Error) {
+                        lastSyncErrorDetail = result.message
+                    }
                 }
             }
 
@@ -625,7 +633,7 @@ class FieldPulseViewModel(application: Application) : AndroidViewModel(applicati
             val summaryMsg = if (failedClockCount == 0 && failedEhsCount == 0) {
                 "Sync complete. Uploaded $syncedClockCount reports and $syncedEhsCount incidents to server."
             } else {
-                "Sync partial: $syncedClockCount synced, $totalRemaining remaining offline."
+                "Sync issue ($totalRemaining remaining offline): ${lastSyncErrorDetail ?: "Could not reach server at ${apiClient.baseUrl}"}"
             }
 
             _uiState.update {

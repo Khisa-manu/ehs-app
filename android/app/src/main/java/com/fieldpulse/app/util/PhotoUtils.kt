@@ -16,6 +16,8 @@ object PhotoUtils {
     /**
      * Generates a real, high-resolution evidence JPEG with cryptographic watermark,
      * GPS coordinates, technician details, and timestamp stamped directly into the image pixels.
+     * When sourceBitmap is provided (from the real device camera or gallery), it is scaled,
+     * processed, and stamped directly with tamper-proof verification metadata.
      */
     fun generateEvidencePhotoBase64(
         context: Context,
@@ -28,10 +30,95 @@ object PhotoUtils {
         accuracyMeters: Float,
         sourceBitmap: Bitmap? = null
     ): String {
-        val width = 640
-        val height = 480
-        val bitmap = sourceBitmap?.copy(Bitmap.Config.ARGB_8888, true) ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
+        return createWatermarkedJpegBase64(
+            headerTag = "FIELD-PULSE EVIDENCE TAMPER-PROOF WATERMARK",
+            categoryTag = requirement.category,
+            labelTag = requirement.shortLabel,
+            reqName = requirement.name,
+            technicianName = technicianName,
+            employeeCode = employeeCode,
+            assignedSite = assignedSite,
+            latitude = latitude,
+            longitude = longitude,
+            accuracyMeters = accuracyMeters,
+            sourceBitmap = sourceBitmap
+        )
+    }
+
+    /**
+     * Generates an incident/observation evidence JPEG with cryptographic watermark.
+     */
+    fun generateIncidentPhotoBase64(
+        context: Context,
+        incidentTitle: String,
+        category: String,
+        technicianName: String,
+        employeeCode: String,
+        assignedSite: String,
+        latitude: Double,
+        longitude: Double,
+        accuracyMeters: Float,
+        sourceBitmap: Bitmap? = null
+    ): String {
+        return createWatermarkedJpegBase64(
+            headerTag = "SPECTRUM EHS INCIDENT EVIDENCE",
+            categoryTag = category.uppercase(Locale.US),
+            labelTag = incidentTitle.take(30),
+            reqName = "EHS_INCIDENT",
+            technicianName = technicianName,
+            employeeCode = employeeCode,
+            assignedSite = assignedSite,
+            latitude = latitude,
+            longitude = longitude,
+            accuracyMeters = accuracyMeters,
+            sourceBitmap = sourceBitmap
+        )
+    }
+
+    private fun createWatermarkedJpegBase64(
+        headerTag: String,
+        categoryTag: String,
+        labelTag: String,
+        reqName: String,
+        technicianName: String,
+        employeeCode: String,
+        assignedSite: String,
+        latitude: Double,
+        longitude: Double,
+        accuracyMeters: Float,
+        sourceBitmap: Bitmap? = null
+    ): String {
+        // Optimal inspection size: clamp max dimension to 960px to keep payload size lightweight (<150KB)
+        val finalBitmap: Bitmap
+        val width: Int
+        val height: Int
+
+        if (sourceBitmap != null) {
+            val maxDim = 960
+            val srcW = sourceBitmap.width
+            val srcH = sourceBitmap.height
+            val scale = if (srcW > maxDim || srcH > maxDim) {
+                maxDim.toFloat() / maxOf(srcW, srcH).toFloat()
+            } else {
+                1f
+            }
+            val targetW = (srcW * scale).toInt().coerceAtLeast(320)
+            val targetH = (srcH * scale).toInt().coerceAtLeast(240)
+
+            val scaled = Bitmap.createScaledBitmap(sourceBitmap, targetW, targetH, true)
+            finalBitmap = scaled.copy(Bitmap.Config.ARGB_8888, true)
+            if (scaled != sourceBitmap && scaled != finalBitmap) {
+                scaled.recycle()
+            }
+            width = finalBitmap.width
+            height = finalBitmap.height
+        } else {
+            width = 640
+            height = 480
+            finalBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        }
+
+        val canvas = Canvas(finalBitmap)
 
         if (sourceBitmap == null) {
             // Draw inspection background with safety gradient and grid
@@ -84,14 +171,15 @@ object PhotoUtils {
                 textAlign = Paint.Align.CENTER
                 isAntiAlias = true
             }
-            canvas.drawText(requirement.category, width / 2f, height / 2f + 16f, catTextPaint)
-            canvas.drawText(requirement.shortLabel, width / 2f, height / 2f + 44f, catTextPaint)
+            canvas.drawText(categoryTag, width / 2f, height / 2f + 16f, catTextPaint)
+            canvas.drawText(labelTag, width / 2f, height / 2f + 44f, catTextPaint)
         }
 
-        // Draw Watermark Stamp Overlay at Bottom
-        val overlayHeight = 110f
+        // Draw Watermark Stamp Overlay at Bottom with dynamic proportional sizing
+        val scaleFactor = (width.toFloat() / 640f).coerceIn(0.7f, 2.0f)
+        val overlayHeight = (105f * scaleFactor).coerceAtLeast(80f)
         val overlayPaint = Paint().apply {
-            color = Color.argb(200, 2, 6, 23)
+            color = Color.argb(215, 2, 6, 23)
             style = Paint.Style.FILL
         }
         canvas.drawRect(0f, height - overlayHeight, width.toFloat(), height.toFloat(), overlayPaint)
@@ -99,7 +187,7 @@ object PhotoUtils {
         // Accent top border of watermark banner
         val accentBorder = Paint().apply {
             color = Color.rgb(245, 158, 11) // Amber 500
-            strokeWidth = 3f
+            strokeWidth = 3f * scaleFactor
         }
         canvas.drawLine(0f, height - overlayHeight, width.toFloat(), height - overlayHeight, accentBorder)
 
@@ -109,49 +197,52 @@ object PhotoUtils {
             timeZone = TimeZone.getTimeZone("UTC")
         }
         val isoTimestamp = isoFormat.format(now)
-        val shaInput = "$employeeCode|$isoTimestamp|$latitude,$longitude|${requirement.name}"
+        val shaInput = "$employeeCode|$isoTimestamp|$latitude,$longitude|$reqName"
         val shaDigest = sha256Hex(shaInput).substring(0, 16).uppercase(Locale.US)
 
         val stampPaint = Paint().apply {
             color = Color.rgb(251, 191, 36) // Amber 400
-            textSize = 14f
+            textSize = (13.5f * scaleFactor).coerceAtLeast(11f)
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             isAntiAlias = true
         }
 
         val textWhite = Paint().apply {
             color = Color.WHITE
-            textSize = 13f
+            textSize = (12.5f * scaleFactor).coerceAtLeast(10f)
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
             isAntiAlias = true
         }
 
         val textMuted = Paint().apply {
             color = Color.rgb(148, 163, 184) // Slate 400
-            textSize = 12f
+            textSize = (11.5f * scaleFactor).coerceAtLeast(9f)
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
             isAntiAlias = true
         }
 
-        val padLeft = 16f
-        var startY = height - overlayHeight + 22f
+        val padLeft = 14f * scaleFactor
+        val lineGap = 19f * scaleFactor
+        var startY = height - overlayHeight + (20f * scaleFactor)
 
-        canvas.drawText("FIELD-PULSE EVIDENCE TAMPER-PROOF WATERMARK", padLeft, startY, stampPaint)
-        startY += 20f
+        canvas.drawText(headerTag, padLeft, startY, stampPaint)
+        startY += lineGap
 
         canvas.drawText("GPS: ${String.format(Locale.US, "%.5f", latitude)}, ${String.format(Locale.US, "%.5f", longitude)} (±${accuracyMeters.toInt()}m) | TIME: $isoTimestamp", padLeft, startY, textWhite)
-        startY += 19f
+        startY += lineGap
 
         canvas.drawText("TECH: $employeeCode - $technicianName | SITE: $assignedSite", padLeft, startY, textWhite)
-        startY += 19f
+        startY += lineGap
 
-        canvas.drawText("REQ: ${requirement.name} | SHA256-TAG: $shaDigest | COMPLIANT", padLeft, startY, textMuted)
+        canvas.drawText("REQ: $reqName | SHA256-TAG: $shaDigest | COMPLIANT", padLeft, startY, textMuted)
 
         // Compress to JPEG and return base64 data URI
         val outputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+        finalBitmap.compress(Bitmap.CompressFormat.JPEG, 82, outputStream)
         val byteArray = outputStream.toByteArray()
         val encoded = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        
+        finalBitmap.recycle()
         return "data:image/jpeg;base64,$encoded"
     }
 

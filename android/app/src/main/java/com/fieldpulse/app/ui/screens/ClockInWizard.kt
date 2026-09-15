@@ -1,5 +1,13 @@
 package com.fieldpulse.app.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -1153,11 +1161,92 @@ fun CameraViewfinderModal(
     onCaptured: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     var isFrontCamera by remember { mutableStateOf(requirement == PhotoRequirement.PPE) }
-    var isFlashing by remember { mutableStateOf(false) }
+    var isProcessing by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val timestampNow = remember {
         SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+    }
+
+    val processCapturedBitmap: (Bitmap?) -> Unit = { capturedBitmap ->
+        if (capturedBitmap != null) {
+            isProcessing = true
+            errorMessage = null
+            try {
+                val watermarkedDataUrl = PhotoUtils.generateEvidencePhotoBase64(
+                    context = context,
+                    requirement = requirement,
+                    technicianName = uiState.currentTechnician.name,
+                    employeeCode = uiState.currentTechnician.employeeCode,
+                    assignedSite = uiState.currentTechnician.assignedSite,
+                    latitude = uiState.currentLatitude,
+                    longitude = uiState.currentLongitude,
+                    accuracyMeters = uiState.gpsAccuracyMeters,
+                    sourceBitmap = capturedBitmap
+                )
+                onCaptured(watermarkedDataUrl)
+            } catch (e: Exception) {
+                errorMessage = "Failed to process photo: ${e.message}"
+            } finally {
+                isProcessing = false
+            }
+        }
+    }
+
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: Bitmap? ->
+        if (bitmap != null) {
+            processCapturedBitmap(bitmap)
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            isProcessing = true
+            errorMessage = null
+            try {
+                val stream = context.contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(stream)
+                stream?.close()
+                if (bitmap != null) {
+                    processCapturedBitmap(bitmap)
+                } else {
+                    errorMessage = "Unable to decode chosen image."
+                    isProcessing = false
+                }
+            } catch (e: Exception) {
+                errorMessage = "Error opening image: ${e.message}"
+                isProcessing = false
+            }
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            takePictureLauncher.launch(null)
+        } else {
+            errorMessage = "Camera permission was denied. You can pick from gallery or grant permission in Android Settings."
+        }
+    }
+
+    val launchRealCamera = {
+        val hasCamPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasCamPermission) {
+            takePictureLauncher.launch(null)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     Dialog(
@@ -1169,32 +1258,15 @@ fun CameraViewfinderModal(
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            // Viewfinder Grid & Live Camera Preview Simulator
+            // Viewfinder Container
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 60.dp, bottom = 120.dp, start = 16.dp, end = 16.dp)
+                    .padding(top = 64.dp, bottom = 110.dp, start = 16.dp, end = 16.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFF0B132B))
                     .border(2.dp, Amber500.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
             ) {
-                // Flash simulation overlay
-                if (isFlashing) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.White)
-                    )
-                }
-
-                // Crosshairs / Viewfinder Focus Box
-                Box(
-                    modifier = Modifier
-                        .size(160.dp)
-                        .align(Alignment.Center)
-                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                )
-
                 // Requirement prompt banner
                 Box(
                     modifier = Modifier
@@ -1213,17 +1285,108 @@ fun CameraViewfinderModal(
                     )
                 }
 
+                // Interactive Capture Action Center
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    if (isProcessing) {
+                        CircularProgressIndicator(color = Amber500, strokeWidth = 3.dp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Stamping Tamper-Proof Evidence & GPS...",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    } else {
+                        // 1. Primary Button: Open Hardware Camera
+                        Button(
+                            onClick = { launchRealCamera() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Amber500),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .height(54.dp)
+                        ) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "OPEN DEVICE CAMERA",
+                                color = Color(0xFF0F172A),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp
+                            )
+                        }
+
+                        // 2. Secondary Button: Choose from Gallery
+                        OutlinedButton(
+                            onClick = { galleryLauncher.launch("image/*") },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                                brush = Brush.horizontalGradient(listOf(Color(0xFF475569), Color(0xFF475569)))
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .height(46.dp)
+                        ) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Amber500, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Choose from Device Gallery", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // 3. Fallback: Simulated Test Frame
+                        TextButton(
+                            onClick = {
+                                val simulatedDataUrl = PhotoUtils.generateEvidencePhotoBase64(
+                                    context = context,
+                                    requirement = requirement,
+                                    technicianName = uiState.currentTechnician.name,
+                                    employeeCode = uiState.currentTechnician.employeeCode,
+                                    assignedSite = uiState.currentTechnician.assignedSite,
+                                    latitude = uiState.currentLatitude,
+                                    longitude = uiState.currentLongitude,
+                                    accuracyMeters = uiState.gpsAccuracyMeters,
+                                    sourceBitmap = null
+                                )
+                                onCaptured(simulatedDataUrl)
+                            }
+                        ) {
+                            Text(
+                                text = "⚡ Use Simulated Test Frame (Demo)",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        if (errorMessage != null) {
+                            Text(
+                                text = errorMessage ?: "",
+                                color = Rose600,
+                                fontSize = 11.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+
                 // Live Watermark HUD in camera corner
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(14.dp)
+                        .padding(12.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color.Black.copy(alpha = 0.8f))
+                        .background(Color.Black.copy(alpha = 0.85f))
                         .padding(10.dp)
                 ) {
                     Text(
-                        text = "📍 GPS: ${uiState.currentLatitude}, ${uiState.currentLongitude} (±${uiState.gpsAccuracyMeters}m)",
+                        text = "📍 GPS: ${String.format(Locale.US, "%.5f", uiState.currentLatitude)}, ${String.format(Locale.US, "%.5f", uiState.currentLongitude)} (±${uiState.gpsAccuracyMeters.toInt()}m)",
                         fontSize = 9.sp,
                         color = Amber500,
                         fontFamily = FontFamily.Monospace,
@@ -1276,49 +1439,40 @@ fun CameraViewfinderModal(
                 )
 
                 IconButton(
-                    onClick = { isFrontCamera = !isFrontCamera },
+                    onClick = { launchRealCamera() },
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.6f))
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Flip Camera", tint = Color.White)
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Open Camera", tint = Amber500)
                 }
             }
 
             // Bottom Shutter Button Controls
-            val context = LocalContext.current
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 28.dp),
+                    .padding(bottom = 20.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // Outer shutter ring
+                // Outer shutter ring that triggers real device camera
                 Box(
                     modifier = Modifier
-                        .size(76.dp)
+                        .size(74.dp)
                         .clip(CircleShape)
                         .border(4.dp, Amber500, CircleShape)
-                        .padding(6.dp)
+                        .padding(5.dp)
                         .clip(CircleShape)
                         .background(Color.White)
                         .clickable {
-                            isFlashing = true
-                            val generatedDataUrl = PhotoUtils.generateEvidencePhotoBase64(
-                                context = context,
-                                requirement = requirement,
-                                technicianName = uiState.currentTechnician.name,
-                                employeeCode = uiState.currentTechnician.employeeCode,
-                                assignedSite = uiState.currentTechnician.assignedSite,
-                                latitude = uiState.currentLatitude,
-                                longitude = uiState.currentLongitude,
-                                accuracyMeters = uiState.gpsAccuracyMeters
-                            )
-                            onCaptured(generatedDataUrl)
-                        }
-                )
+                            launchRealCamera()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Capture Real Photo", tint = Color(0xFF0F172A), modifier = Modifier.size(30.dp))
+                }
             }
         }
     }

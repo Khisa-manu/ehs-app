@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.fieldpulse.app.data.model.ClockRecord
 import com.fieldpulse.app.data.model.SyncStatus
 import com.fieldpulse.app.ui.FieldPulseViewModel
+import com.fieldpulse.app.ui.components.ServerSettingsDialog
 import com.fieldpulse.app.ui.theme.Amber500
 import com.fieldpulse.app.ui.theme.Emerald600
 import com.fieldpulse.app.ui.theme.Rose600
@@ -319,56 +320,9 @@ fun RecordsScreen(viewModel: FieldPulseViewModel) {
 
     // Backend Server Settings Modal
     if (showServerDialog) {
-        AlertDialog(
-            onDismissRequest = { showServerDialog = false },
-            title = { Text("Backend Server API Settings", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Set the backend host URL where PHP and SQLite endpoints are served.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = serverUrlInput,
-                        onValueChange = { serverUrlInput = it },
-                        label = { Text("Base URL") },
-                        placeholder = { Text("http://10.0.2.2:3000") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Text(
-                        text = "• Android Emulator Host: http://10.0.2.2:3000\n• Physical Device LAN: http://<LAN-IP>:3000\n• Production: https://domain.com/cpanel-backend",
-                        fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (uiState.serverConnectionStatus != null) {
-                        Text(
-                            text = uiState.serverConnectionStatus ?: "",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (uiState.serverConnectionStatus?.contains("Online") == true) Emerald600 else Rose600
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.updateBackendUrl(serverUrlInput)
-                        showServerDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Amber500)
-                ) {
-                    Text("Save & Connect", color = Color.Black, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showServerDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+        ServerSettingsDialog(
+            viewModel = viewModel,
+            onDismiss = { showServerDialog = false }
         )
     }
 }

@@ -30,6 +30,8 @@ import com.fieldpulse.app.ui.screens.RecordsScreen
 import com.fieldpulse.app.ui.theme.FieldPulseTheme
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Dns
+import com.fieldpulse.app.ui.components.ServerSettingsDialog
 
 class MainActivity : ComponentActivity() {
     private val viewModel: FieldPulseViewModel by viewModels()
@@ -63,6 +65,13 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 actions = {
+                                    IconButton(onClick = { viewModel.toggleServerSettings(true) }) {
+                                        Icon(
+                                            Icons.Default.Dns,
+                                            contentDescription = "Server Settings",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                     IconButton(onClick = { viewModel.toggleOfflineSimulation() }) {
                                         Icon(
                                             if (uiState.isOfflineMode) Icons.Default.CloudOff else Icons.Default.CloudDone,
@@ -165,6 +174,14 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                    }
+
+                    // Server API Settings Dialog
+                    if (uiState.showServerSettingsDialog) {
+                        ServerSettingsDialog(
+                            viewModel = viewModel,
+                            onDismiss = { viewModel.toggleServerSettings(false) }
+                        )
                     }
 
                     // Logout Confirmation Dialog
