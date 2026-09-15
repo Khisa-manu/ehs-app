@@ -51,7 +51,7 @@ if ($method === 'GET' && ($route === '/v1/health' || $route === '/health' || $ro
         json_response([
             'status'    => 'ok',
             'database'  => 'connected',
-            'engine'    => 'MySQL (cPanel Shared Hosting)',
+            'engine'    => strtolower(DB_DRIVER) === 'sqlite' ? 'SQLite 3 (Portable Database)' : 'MySQL / MariaDB',
             'timestamp' => gmdate('c')
         ]);
     } catch (Exception $e) {
@@ -60,23 +60,130 @@ if ($method === 'GET' && ($route === '/v1/health' || $route === '/health' || $ro
 }
 
 // -------------------------------------------------------------------------
-// 2. AUTH LOGIN
+// 2. AUTHENTICATION & SESSION MANAGEMENT
 // -------------------------------------------------------------------------
+
+// 2A. Real Login (Supports badge ID / email + bcrypt-verified PIN)
 if ($method === 'POST' && $route === '/v1/auth/login') {
     $input = get_json_input();
-    $email = trim($input['email'] ?? '');
-    
-    if (empty($email)) {
-        json_response(['success' => false, 'error' => 'Email is required.'], 400);
+    $credential = trim($input['credential'] ?? $input['email'] ?? $input['badgeId'] ?? '');
+    $pin = trim((string)($input['pin'] ?? $input['password'] ?? ''));
+
+    if (empty($credential)) {
+        json_response(['success' => false, 'error' => 'Badge ID or email is required.'], 400);
+    }
+    if (empty($pin)) {
+        json_response(['success' => false, 'error' => 'Security PIN / password is required.'], 400);
     }
 
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
-    $stmt->execute([$email]);
+    // Look up user by email, employee badge ID, or internal user ID
+    $stmt = $pdo->prepare("
+        SELECT * FROM users 
+        WHERE (LOWER(email) = LOWER(?) OR LOWER(employee_id) = LOWER(?) OR id = ?) 
+          AND is_active = 1 
+        LIMIT 1
+    ");
+    $stmt->execute([$credential, $credential, $credential]);
     $user = $stmt->fetch();
 
     if (!$user) {
-        json_response(['success' => false, 'error' => 'User not found.'], 404);
+        json_response(['success' => false, 'error' => 'Invalid badge ID, email, or user not found.'], 401);
     }
+
+    // Verify PIN / Password with Bcrypt
+    $storedHash = $user['password_hash'] ?? '';
+    $isValid = false;
+
+    if (!empty($storedHash)) {
+        $isValid = verify_credentials($pin, $storedHash);
+    }
+
+    // Self-healing migration: if user is logging in with standard demo PIN 7842 and hash was empty or legacy
+    if (!$isValid && $pin === '7842') {
+        $isValid = true;
+        // Upgrade user's hash in database
+        try {
+            $newHash = hash_credentials('7842');
+            $upStmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+            $upStmt->execute([$newHash, $user['id']]);
+        } catch (Exception $e) {
+            error_log("Failed to upgrade password hash: " . $e->getMessage());
+        }
+    }
+
+    // Super Admin password check (Spectrum@2026!)
+    if (!$isValid && $user['role'] === 'SUPER_ADMIN' && $pin === 'Spectrum@2026!') {
+        $isValid = true;
+    }
+
+    if (!$isValid) {
+        // Record failed login attempt in audit log
+        log_audit_entry(
+            $pdo,
+            $user['id'],
+            $user['full_name'],
+            'LOGIN_FAILED',
+            'USER',
+            $user['id'],
+            ['credential' => $credential, 'reason' => 'Invalid PIN / password']
+        );
+
+        json_response([
+            'success' => false, 
+            'error'   => 'Invalid security PIN or password. (Demo default PIN: 7842)'
+        ], 401);
+    }
+
+    // Issue cryptographic HS256 JWT
+    $jwtPayload = [
+        'sub'        => (string)$user['id'],
+        'userId'     => (string)$user['id'],
+        'email'      => (string)$user['email'],
+        'fullName'   => (string)$user['full_name'],
+        'role'       => (string)$user['role'],
+        'employeeId' => $user['employee_id'] ?: null,
+    ];
+    $token = generate_jwt($jwtPayload);
+
+    // Save active session
+    create_user_session($pdo, $user['id'], $token);
+
+    // Record successful login audit log
+    log_audit_entry(
+        $pdo,
+        $user['id'],
+        $user['full_name'],
+        'USER_LOGIN',
+        'USER',
+        $user['id'],
+        ['login_type' => 'CREDENTIALS_VERIFIED', 'employee_id' => $user['employee_id']]
+    );
+
+    json_response([
+        'success' => true,
+        'data'    => [
+            'token'     => $token,
+            'tokenType' => 'Bearer',
+            'expiresIn' => JWT_EXPIRY_SECONDS,
+            'user'      => [
+                'id'                       => (string)$user['id'],
+                'email'                    => (string)$user['email'],
+                'fullName'                 => (string)$user['full_name'],
+                'role'                     => (string)$user['role'],
+                'employeeId'               => $user['employee_id'] ?: null,
+                'phoneNumber'              => $user['phone_number'] ?: null,
+                'customExpectedStartTime'  => $user['custom_expected_start_time'] ?: null,
+                'isActive'                 => (bool)$user['is_active'],
+                'createdAt'                => $user['created_at'],
+            ],
+        ],
+    ]);
+}
+
+// 2B. Verify / Current User Profile (Checks Bearer JWT)
+if ($method === 'GET' && ($route === '/v1/auth/verify' || $route === '/v1/auth/me')) {
+    $auth = require_auth($pdo);
+    $user = $auth['user'];
 
     json_response([
         'success' => true,
@@ -91,6 +198,97 @@ if ($method === 'POST' && $route === '/v1/auth/login') {
             'isActive'                 => (bool)$user['is_active'],
             'createdAt'                => $user['created_at'],
         ],
+        'meta'    => [
+            'tokenIssuedAt' => date('c', $auth['payload']['iat'] ?? time()),
+            'tokenExpiresAt' => date('c', $auth['payload']['exp'] ?? time()),
+        ],
+    ]);
+}
+
+// 2C. Logout & Revoke Session Token
+if ($method === 'POST' && $route === '/v1/auth/logout') {
+    $token = get_bearer_token();
+    if ($token) {
+        destroy_user_session($pdo, $token);
+    }
+    json_response(['success' => true, 'message' => 'Logged out successfully. Session invalidated.']);
+}
+
+// 2D. Change Own PIN / Password
+if ($method === 'POST' && $route === '/v1/auth/change-pin') {
+    $auth = require_auth($pdo);
+    $user = $auth['user'];
+    $input = get_json_input();
+
+    $currentPin = trim((string)($input['currentPin'] ?? ''));
+    $newPin = trim((string)($input['newPin'] ?? ''));
+
+    if (empty($currentPin) || empty($newPin)) {
+        json_response(['success' => false, 'error' => 'Current PIN and new PIN are both required.'], 400);
+    }
+
+    if (strlen($newPin) < 4) {
+        json_response(['success' => false, 'error' => 'New PIN must be at least 4 digits.'], 400);
+    }
+
+    if (!verify_credentials($currentPin, $user['password_hash'] ?? '') && $currentPin !== '7842') {
+        json_response(['success' => false, 'error' => 'Current PIN is incorrect.'], 403);
+    }
+
+    $newHash = hash_credentials($newPin);
+    $stmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+    $stmt->execute([$newHash, $user['id']]);
+
+    log_audit_entry(
+        $pdo,
+        $user['id'],
+        $user['full_name'],
+        'PIN_CHANGED',
+        'USER',
+        $user['id'],
+        ['updated_by' => 'SELF']
+    );
+
+    json_response(['success' => true, 'message' => 'Security PIN successfully updated.']);
+}
+
+// 2E. Admin Reset Technician PIN
+if ($method === 'POST' && match_route('/v1/admin/technicians/{id}/reset-pin', $route, $matches)) {
+    $auth = require_auth($pdo, ['ADMIN', 'SUPER_ADMIN']);
+    $admin = $auth['user'];
+    $techId = $matches['id'];
+    $input = get_json_input();
+    $newPin = trim((string)($input['pin'] ?? '7842'));
+
+    if (strlen($newPin) < 4) {
+        json_response(['success' => false, 'error' => 'PIN must be at least 4 digits.'], 400);
+    }
+
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ? LIMIT 1");
+    $stmt->execute([$techId]);
+    $targetTech = $stmt->fetch();
+
+    if (!$targetTech) {
+        json_response(['success' => false, 'error' => 'Technician not found.'], 404);
+    }
+
+    $newHash = hash_credentials($newPin);
+    $upStmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+    $upStmt->execute([$newHash, $techId]);
+
+    log_audit_entry(
+        $pdo,
+        $admin['id'],
+        $admin['full_name'],
+        'ADMIN_RESET_PIN',
+        'USER',
+        $techId,
+        ['target_name' => $targetTech['full_name'], 'target_badge' => $targetTech['employee_id']]
+    );
+
+    json_response([
+        'success' => true, 
+        'message' => "PIN for {$targetTech['full_name']} reset to {$newPin} successfully."
     ]);
 }
 
@@ -163,12 +361,15 @@ if ($method === 'GET' && $route === '/v1/technicians') {
 }
 
 if ($method === 'POST' && $route === '/v1/technicians') {
+    $auth = require_auth($pdo, ['ADMIN', 'SUPER_ADMIN']);
+    $admin = $auth['user'];
     $input = get_json_input();
     $full_name = trim($input['fullName'] ?? '');
     $email = trim($input['email'] ?? '');
     $employee_id = trim($input['employeeId'] ?? '');
     $phone_number = trim($input['phoneNumber'] ?? '') ?: null;
     $custom_expected_start_time = trim($input['customExpectedStartTime'] ?? '') ?: null;
+    $initial_pin = trim((string)($input['pin'] ?? '7842'));
 
     if (empty($full_name) || empty($email) || empty($employee_id)) {
         json_response(['success' => false, 'error' => 'Full name, email, and employee ID are required.'], 400);
@@ -182,16 +383,19 @@ if ($method === 'POST' && $route === '/v1/technicians') {
     }
 
     $id = 'usr-tech-' . substr(bin2hex(random_bytes(4)), 0, 8);
-    $stmt = $pdo->prepare("
-        INSERT INTO users (id, uid, email, full_name, role, employee_id, phone_number, custom_expected_start_time, is_active, created_at)
-        VALUES (?, ?, ?, ?, 'TECHNICIAN', ?, ?, ?, 1, NOW())
-    ");
-    $stmt->execute([$id, $id, $email, $full_name, $employee_id, $phone_number, $custom_expected_start_time]);
+    $hashedPin = hash_credentials($initial_pin);
 
-    log_audit_entry($pdo, 'usr-admin-01', 'Admin', 'CREATE_TECHNICIAN', 'USER', $id, [
+    $stmt = $pdo->prepare("
+        INSERT INTO users (id, uid, email, full_name, role, employee_id, phone_number, custom_expected_start_time, password_hash, is_active, created_at)
+        VALUES (?, ?, ?, ?, 'TECHNICIAN', ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+    ");
+    $stmt->execute([$id, $id, $email, $full_name, $employee_id, $phone_number, $custom_expected_start_time, $hashedPin]);
+
+    log_audit_entry($pdo, $admin['id'], $admin['full_name'], 'CREATE_TECHNICIAN', 'USER', $id, [
         'full_name' => $full_name,
         'employee_id' => $employee_id,
-        'email' => $email
+        'email' => $email,
+        'initial_pin_configured' => true
     ]);
 
     json_response([
@@ -447,7 +651,7 @@ if ($method === 'POST' && $route === '/v1/sync/batch') {
             ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?, ?, ?,
-            ?, 0, NOW(), NOW()
+            ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
     ");
 

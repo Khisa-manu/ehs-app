@@ -1,20 +1,21 @@
-# FieldPulse EHS - Complete cPanel Shared Hosting Deployment Guide
-## PHP / MySQL Backend Migration
+# FieldPulse EHS - cPanel Shared Hosting & Local Deployment Guide
+## PHP Backend: MySQL / MariaDB & SQLite Engines
 
-This guide details the complete step-by-step procedure to deploy the **FieldPulse EHS Mobile Application Backend** onto any standard **cPanel shared-hosting account** running **Apache, PHP 7.4/8.x, and MySQL/MariaDB**.
+This guide details the procedure to deploy the **FieldPulse EHS Mobile Application Backend** onto any standard **cPanel shared-hosting account** or Apache/PHP server running **PHP 7.4/8.x** with either **SQLite** (zero-configuration portable database) or **MySQL/MariaDB**.
 
 ---
 
 ### Backend Directory Structure
 
-All necessary PHP/MySQL files are pre-built inside the `/cpanel-backend/` directory:
+All necessary PHP files are pre-built inside the `/cpanel-backend/` directory:
 
 ```
 cpanel-backend/
 ├── .htaccess                   # Apache rewrite rules for REST routing & security
-├── config.php                  # Database connection (PDO), CORS & helper functions
-├── index.php                   # REST API Front Controller (replaces Express routes)
+├── config.php                  # Dual-engine connection (MySQL/SQLite PDO), CORS & helpers
+├── index.php                   # REST API Front Controller
 ├── schema.sql                  # MySQL/MariaDB database schema with default seed data
+├── schema.sqlite.sql           # SQLite database schema with default seed data
 ├── README-cpanel-deployment.md # This deployment guide
 └── uploads/                    # Local storage folder for field photos
     └── .htaccess               # Prevents script execution in uploads directory
@@ -22,7 +23,34 @@ cpanel-backend/
 
 ---
 
-### Step 1: Create the MySQL Database in cPanel
+### Database Options: Choose SQLite or MySQL/MariaDB
+
+You can choose either database engine simply by setting `DB_DRIVER` in `config.php`:
+
+#### Option 1: SQLite (Recommended for Fastest Zero-Config Setup)
+- **Zero setup**: No database wizard, no phpMyAdmin, no user passwords!
+- In `config.php`:
+  ```php
+  define('DB_DRIVER', 'sqlite');
+  define('DB_SQLITE_PATH', __DIR__ . '/fieldpulse.sqlite');
+  ```
+- The backend will **automatically create `fieldpulse.sqlite`** and populate all tables and seed data upon the first request!
+
+#### Option 2: MySQL / MariaDB
+- Standard relational database setup via cPanel.
+- In `config.php`:
+  ```php
+  define('DB_DRIVER', 'mysql');
+  define('DB_HOST', 'localhost');
+  define('DB_NAME', 'cpaneluser_fieldpulse');
+  define('DB_USER', 'cpaneluser_dbuser');
+  define('DB_PASS', 'YourSecurePasswordHere');
+  ```
+- Import `schema.sql` into phpMyAdmin (instructions below).
+
+---
+
+### Step 1 (MySQL Only): Create the MySQL Database in cPanel
 
 1. Log into your **cPanel** control panel.
 2. In the **Databases** section, click on **MySQL Database Wizard**.

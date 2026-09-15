@@ -17,11 +17,17 @@ import {
 } from 'lucide-react';
 
 export const TechniciansView: React.FC = () => {
-  const { allUsers, createTechnician, updateTechnician, deleteTechnician, settings } = useApp();
+  const { allUsers, createTechnician, updateTechnician, deleteTechnician, settings, resetTechnicianPin } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [deletingTech, setDeletingTech] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // PIN Reset State
+  const [pinResetTech, setPinResetTech] = useState<User | null>(null);
+  const [newPinValue, setNewPinValue] = useState('7842');
+  const [isResettingPin, setIsResettingPin] = useState(false);
+  const [pinStatusMessage, setPinStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // New Tech Form State
   const [fullName, setFullName] = useState('');
@@ -29,6 +35,7 @@ export const TechniciansView: React.FC = () => {
   const [employeeId, setEmployeeId] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [customStartTime, setCustomStartTime] = useState('');
+  const [initialPin, setInitialPin] = useState('7842');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -55,6 +62,7 @@ export const TechniciansView: React.FC = () => {
       employeeId,
       phoneNumber: phoneNumber || undefined,
       customExpectedStartTime: customStartTime || undefined,
+      pin: initialPin || '7842',
     });
 
     setIsSubmitting(false);
@@ -66,8 +74,35 @@ export const TechniciansView: React.FC = () => {
       setEmployeeId('');
       setPhoneNumber('');
       setCustomStartTime('');
+      setInitialPin('7842');
     } else {
       setFormError('Failed to create technician record.');
+    }
+  };
+
+  const handleConfirmResetPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinResetTech) return;
+    setIsResettingPin(true);
+    setPinStatusMessage(null);
+
+    const res = await resetTechnicianPin(pinResetTech.id, newPinValue);
+    setIsResettingPin(false);
+    if (res.success) {
+      setPinStatusMessage({
+        type: 'success',
+        text: `PIN successfully reset to "${newPinValue}" for ${pinResetTech.fullName}. Encrypted with Bcrypt.`,
+      });
+      setTimeout(() => {
+        setPinResetTech(null);
+        setPinStatusMessage(null);
+        setNewPinValue('7842');
+      }, 2000);
+    } else {
+      setPinStatusMessage({
+        type: 'error',
+        text: res.error || 'Failed to reset technician PIN.',
+      });
     }
   };
 
@@ -165,8 +200,13 @@ export const TechniciansView: React.FC = () => {
               </span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => alert(`Password reset instructions simulated for ${tech.email}`)}
+                  onClick={() => {
+                    setPinResetTech(tech);
+                    setNewPinValue('7842');
+                    setPinStatusMessage(null);
+                  }}
                   className="text-slate-500 hover:text-slate-800 text-[11px] font-bold flex items-center gap-1 cursor-pointer px-2 py-1 rounded-lg hover:bg-slate-100"
+                  title="Reset technician security PIN"
                 >
                   <KeyRound className="w-3 h-3" />
                   <span>Reset PIN</span>
@@ -294,19 +334,37 @@ export const TechniciansView: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Custom Expected Start Time (Optional)
-                </label>
-                <input
-                  type="time"
-                  value={customStartTime}
-                  onChange={(e) => setCustomStartTime(e.target.value)}
-                  className="w-full bg-[#F7F7F7] border border-slate-200 rounded-xl px-3 py-2.5 font-mono text-slate-900 focus:outline-hidden focus:border-[#D32F2F] focus:bg-white focus:ring-2 focus:ring-[#FFEBEE]"
-                />
-                <span className="text-[10px] text-slate-400 block mt-0.5">
-                  Leave blank to inherit global system default (08:00 AM)
-                </span>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Expected Start Time
+                  </label>
+                  <input
+                    type="time"
+                    value={customStartTime}
+                    onChange={(e) => setCustomStartTime(e.target.value)}
+                    className="w-full bg-[#F7F7F7] border border-slate-200 rounded-xl px-3 py-2.5 font-mono text-slate-900 focus:outline-hidden focus:border-[#D32F2F] focus:bg-white focus:ring-2 focus:ring-[#FFEBEE]"
+                  />
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    Blank for default (08:00 AM)
+                  </span>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Initial Security PIN *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="7842"
+                    value={initialPin}
+                    onChange={(e) => setInitialPin(e.target.value)}
+                    className="w-full bg-[#F7F7F7] border border-slate-200 rounded-xl px-3 py-2.5 font-mono text-slate-900 focus:outline-hidden focus:border-[#D32F2F] focus:bg-white focus:ring-2 focus:ring-[#FFEBEE]"
+                  />
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    Hashed with Bcrypt (Default: 7842)
+                  </span>
+                </div>
               </div>
 
               {formError && (
@@ -327,6 +385,69 @@ export const TechniciansView: React.FC = () => {
                   className="px-5 py-2 rounded-xl bg-[#D32F2F] hover:bg-[#B71C1C] text-white font-bold shadow-xs cursor-pointer"
                 >
                   {isSubmitting ? 'Saving...' : 'Create Technician'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RESET PIN MODAL */}
+      {pinResetTech && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#FFEBEE] text-[#D32F2F] flex items-center justify-center mx-auto">
+              <KeyRound className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="font-heading font-bold text-base text-slate-900">
+                Reset Technician PIN
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Set a new access PIN for <strong className="text-slate-800">{pinResetTech.fullName}</strong> ({pinResetTech.employeeId}). The PIN is securely hashed using Bcrypt.
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirmResetPin} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  New Security PIN
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Enter 4-8 digit PIN"
+                  value={newPinValue}
+                  onChange={(e) => setNewPinValue(e.target.value)}
+                  className="w-full bg-[#F7F7F7] border border-slate-200 rounded-xl px-3 py-2.5 font-mono text-center tracking-widest text-lg font-bold text-slate-900 focus:outline-hidden focus:border-[#D32F2F] focus:bg-white focus:ring-2 focus:ring-[#FFEBEE]"
+                />
+              </div>
+
+              {pinStatusMessage && (
+                <div className={`p-2.5 rounded-xl text-xs font-semibold ${pinStatusMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {pinStatusMessage.text}
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isResettingPin}
+                  onClick={() => {
+                    setPinResetTech(null);
+                    setPinStatusMessage(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-slate-600 font-bold hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResettingPin}
+                  className="px-5 py-2 rounded-xl bg-[#D32F2F] hover:bg-[#B71C1C] text-white font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isResettingPin ? 'Updating...' : 'Save New PIN'}
                 </button>
               </div>
             </form>

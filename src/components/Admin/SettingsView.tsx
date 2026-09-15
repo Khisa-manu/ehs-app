@@ -8,11 +8,13 @@ import {
   Save, 
   Check, 
   AlertCircle,
-  Database
+  Database,
+  KeyRound,
+  Lock
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
-  const { settings, updateSettings } = useApp();
+  const { settings, updateSettings, currentUser, changePin } = useApp();
 
   const [defaultStartTime, setDefaultStartTime] = useState(settings?.defaultExpectedStartTime || '08:00');
   const [gracePeriod, setGracePeriod] = useState(settings?.gracePeriodMinutes ?? 5);
@@ -22,6 +24,14 @@ export const SettingsView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Change PIN State
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [isChangingPin, setIsChangingPin] = useState(false);
+  const [pinChangeSuccess, setPinChangeSuccess] = useState<string | null>(null);
+  const [pinChangeError, setPinChangeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -192,6 +202,116 @@ export const SettingsView: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* Real Security & PIN Management Card */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center">
+            <Lock className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-heading font-extrabold text-base text-slate-900">
+              Account Security & PIN
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Change your personnel access PIN. Secured with Bcrypt encryption and 7-day JWT sessions.
+            </p>
+          </div>
+        </div>
+
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setPinChangeError(null);
+            setPinChangeSuccess(null);
+
+            if (newPin !== confirmPin) {
+              setPinChangeError('New PIN and confirmation do not match.');
+              return;
+            }
+            if (newPin.length < 4) {
+              setPinChangeError('PIN must be at least 4 digits.');
+              return;
+            }
+
+            setIsChangingPin(true);
+            const res = await changePin(currentPin, newPin);
+            setIsChangingPin(false);
+
+            if (res.success) {
+              setPinChangeSuccess('Your security PIN was successfully changed and updated in database.');
+              setCurrentPin('');
+              setNewPin('');
+              setConfirmPin('');
+              setTimeout(() => setPinChangeSuccess(null), 4000);
+            } else {
+              setPinChangeError(res.error || 'Failed to update PIN. Please verify your current PIN.');
+            }
+          }}
+          className="space-y-4 text-xs"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Current PIN *</label>
+              <input
+                type="password"
+                required
+                placeholder="••••"
+                value={currentPin}
+                onChange={(e) => setCurrentPin(e.target.value)}
+                className="w-full bg-[#F7F7F7] border border-slate-200 rounded-xl px-3 py-2 text-slate-900 font-mono focus:outline-hidden focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-100"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">New PIN *</label>
+              <input
+                type="password"
+                required
+                placeholder="4-8 digits"
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value)}
+                className="w-full bg-[#F7F7F7] border border-slate-200 rounded-xl px-3 py-2 text-slate-900 font-mono focus:outline-hidden focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-100"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Confirm New PIN *</label>
+              <input
+                type="password"
+                required
+                placeholder="Confirm digits"
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value)}
+                className="w-full bg-[#F7F7F7] border border-slate-200 rounded-xl px-3 py-2 text-slate-900 font-mono focus:outline-hidden focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-100"
+              />
+            </div>
+          </div>
+
+          {pinChangeSuccess && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs font-bold text-emerald-700 flex items-center gap-2">
+              <Check className="w-4 h-4 shrink-0" />
+              <span>{pinChangeSuccess}</span>
+            </div>
+          )}
+
+          {pinChangeError && (
+            <div className="p-3 bg-[#FFEBEE] border border-red-200 rounded-2xl text-xs font-bold text-[#D32F2F] flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{pinChangeError}</span>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={isChangingPin}
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-98 text-white font-bold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>{isChangingPin ? 'Updating PIN...' : 'Update Security PIN'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

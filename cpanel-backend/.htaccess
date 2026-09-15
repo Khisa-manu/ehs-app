@@ -12,6 +12,10 @@
     Deny from all
   </FilesMatch>
 
+  # Pass Authorization Header to PHP on FastCGI / FPM (cPanel default)
+  RewriteCond %{HTTP:Authorization} ^(.*)
+  RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+
   # Allow direct access to real files and directories (such as uploaded photos)
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d

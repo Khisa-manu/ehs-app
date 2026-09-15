@@ -149,3 +149,22 @@ export interface OfflineSyncQueueItem {
   lastError?: string;
   createdAt: string;
 }
+
+// Authentication types
+export interface AuthSession {
+  token: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+  user: User;
+}
+
+export interface LoginResponse {
+  success: boolean;
+  data?: AuthSession;
+  error?: string;
+}
+
+export interface LoginCredentials {
+  credential: string;
+  pin: string;
+}

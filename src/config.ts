@@ -1,6 +1,6 @@
 /**
  * FieldPulse Application Configuration
- * Allows dynamic configuration of the backend API URL (Node.js/Postgres or PHP/MySQL on cPanel)
+ * Allows dynamic configuration of the backend API URL (PHP/MySQL, MariaDB, or SQLite)
  */
 
 export const API_BASE_URL: string = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');

@@ -20,12 +20,32 @@ CREATE TABLE `users` (
   `employee_id` VARCHAR(64) DEFAULT NULL,
   `phone_number` VARCHAR(64) DEFAULT NULL,
   `custom_expected_start_time` VARCHAR(16) DEFAULT NULL,
+  `password_hash` VARCHAR(255) NOT NULL DEFAULT '$2b$10$6izK0RnE0Uj7CVOzyn8AHuUfe8WmK8RWXf/djYPweeuEadVYW6qOC',
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_users_email` (`email`),
   UNIQUE KEY `uk_users_uid` (`uid`),
   KEY `idx_users_role` (`role`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------------------
+-- 1B. Table structure for table `user_sessions`
+-- -------------------------------------------------------------------------
+DROP TABLE IF EXISTS `user_sessions`;
+CREATE TABLE `user_sessions` (
+  `id` VARCHAR(64) NOT NULL,
+  `user_id` VARCHAR(64) NOT NULL,
+  `token_hash` VARCHAR(255) NOT NULL,
+  `ip_address` VARCHAR(64) DEFAULT NULL,
+  `user_agent` TEXT DEFAULT NULL,
+  `expires_at` DATETIME NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_sessions_user` (`user_id`),
+  KEY `idx_sessions_token` (`token_hash`),
+  KEY `idx_sessions_expires` (`expires_at`),
+  CONSTRAINT `fk_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------------------

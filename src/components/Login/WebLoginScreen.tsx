@@ -15,50 +15,36 @@ import {
 } from 'lucide-react';
 
 export const WebLoginScreen: React.FC = () => {
-  const { allUsers, login } = useApp();
+  const { allUsers, loginWithCredentials } = useApp();
   const [badgeId, setBadgeId] = useState('SE-7842');
   const [pin, setPin] = useState('7842');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const cleanBadge = badgeId.trim().toLowerCase();
-      const matched = allUsers.find(
-        (u) =>
-          u.employeeId?.toLowerCase() === cleanBadge ||
-          u.email.toLowerCase() === cleanBadge ||
-          u.id.toLowerCase() === cleanBadge ||
-          u.fullName.toLowerCase().includes(cleanBadge)
-      );
-
-      if (matched) {
-        login(matched);
-      } else {
-        // Fallback demo technician if custom entered
-        const fallbackTech: User = {
-          id: `usr-${Date.now()}`,
-          fullName: badgeId.includes('@') ? badgeId.split('@')[0] : `Technician ${badgeId}`,
-          email: badgeId.includes('@') ? badgeId : `${badgeId.toLowerCase()}@spectrum-ehs.com`,
-          employeeId: badgeId.toUpperCase(),
-          role: badgeId.toLowerCase().includes('admin') ? 'ADMIN' : 'TECHNICIAN',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        };
-        login(fallbackTech);
-      }
-      setIsLoading(false);
-    }, 250);
+    const res = await loginWithCredentials(badgeId, pin);
+    if (!res.success) {
+      setError(res.error || 'Authentication failed. Please verify your badge ID and PIN.');
+    }
+    setIsLoading(false);
   };
 
-  const handleQuickSelect = (user: User) => {
-    setBadgeId(user.employeeId || user.email);
+  const handleQuickSelect = async (user: User) => {
+    const cred = user.employeeId || user.email;
+    setBadgeId(cred);
     setPin('7842');
-    login(user);
+    setError(null);
+    setIsLoading(true);
+
+    const res = await loginWithCredentials(cred, '7842');
+    if (!res.success) {
+      setError(res.error || 'Quick login failed');
+    }
+    setIsLoading(false);
   };
 
   return (
@@ -157,10 +143,13 @@ export const WebLoginScreen: React.FC = () => {
             </button>
           </form>
 
-          {/* Offline Ready Notice */}
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span>Local offline authentication active for field dead-zones</span>
+          {/* Real Authentication & Offline Notice */}
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <div className="flex items-center gap-1.5 text-emerald-700">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Bcrypt PIN + HS256 JWT</span>
+            </div>
+            <span className="text-[10px] text-slate-400">Offline fail-safe enabled</span>
           </div>
         </div>
 

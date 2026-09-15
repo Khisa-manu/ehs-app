@@ -3,10 +3,12 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
+import {sqliteApiPlugin} from './vite-sqlite-api';
 
 export default defineConfig(() => {
   return {
     plugins: [
+      sqliteApiPlugin(),
       react(),
       tailwindcss(),
       VitePWA({
