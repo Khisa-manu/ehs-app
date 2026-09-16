@@ -141,6 +141,33 @@ CREATE TABLE `audit_logs` (
   KEY `idx_audit_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- -------------------------------------------------------------------------
+-- 6. Table structure for table `ehs_incidents`
+-- -------------------------------------------------------------------------
+DROP TABLE IF EXISTS `ehs_incidents`;
+CREATE TABLE `ehs_incidents` (
+  `id` VARCHAR(64) NOT NULL,
+  `technician_id` VARCHAR(64) NOT NULL,
+  `technician_name` VARCHAR(191) NOT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `incident_type` VARCHAR(64) NOT NULL,
+  `risk_level` VARCHAR(32) NOT NULL,
+  `description` TEXT NOT NULL,
+  `immediate_action_taken` TEXT NOT NULL,
+  `latitude` DOUBLE DEFAULT NULL,
+  `longitude` DOUBLE DEFAULT NULL,
+  `photo_url` TEXT DEFAULT NULL,
+  `status` VARCHAR(32) NOT NULL DEFAULT 'OPEN',
+  `resolution_notes` TEXT DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_incident_status` (`status`),
+  KEY `idx_incident_risk` (`risk_level`),
+  KEY `idx_incident_tech` (`technician_id`),
+  KEY `idx_incident_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- =========================================================================
 -- SEED DATA INSERTION
 -- =========================================================================

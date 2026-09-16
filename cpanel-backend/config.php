@@ -35,13 +35,15 @@ define('JWT_EXPIRY_SECONDS', (int)(getenv('JWT_EXPIRY_SECONDS') ?: 604800)); // 
 // -------------------------------------------------------------------------
 // 2B. CORS HEADERS (Required for Mobile PWA, Capacitor, and Cross-Origin Web)
 // -------------------------------------------------------------------------
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept");
-header("Access-Control-Max-Age: 86400");
+if (!headers_sent()) {
+    header("Access-Control-Allow-Origin: *");
+    header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept");
+    header("Access-Control-Max-Age: 86400");
+}
 
 // Immediately respond to preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
     exit;
 }

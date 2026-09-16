@@ -103,7 +103,24 @@ if ($method === 'GET' && (
 }
 
 // -------------------------------------------------------------------------
-// 1. HEALTH CHECK
+// 1. ADMIN DASHBOARD ROUTE (PHP + Bootstrap 5 + JavaScript + Chart.js)
+// -------------------------------------------------------------------------
+if ($method === 'GET' && ($route === '/dashboard' || $route === '/admin' || $route === '/index.html')) {
+    require __DIR__ . '/dashboard.php';
+    exit;
+}
+
+if ($method === 'GET' && $route === '/') {
+    $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
+    // If browser requesting webpage, load the Admin Dashboard
+    if (strpos($accept, 'text/html') !== false || empty($accept) || $accept === '*/*') {
+        require __DIR__ . '/dashboard.php';
+        exit;
+    }
+}
+
+// -------------------------------------------------------------------------
+// 1B. API HEALTH CHECK
 // -------------------------------------------------------------------------
 if ($method === 'GET' && ($route === '/v1/health' || $route === '/health' || $route === '/')) {
     try {
