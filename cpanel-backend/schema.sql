@@ -169,31 +169,4 @@ INSERT INTO `ehs_questions` (`id`, `code`, `category`, `question_text`, `guidanc
 ('ehs-q5', 'SITE_HAZARDS', 'Environmental & Site Hazards', 'Have site-specific electrical lines, open excavations, or chemical risks been surveyed and marked?', 'Confirm minimum 10-foot boundary from overhead power lines.', 1, 5, 1)
 ON DUPLICATE KEY UPDATE `question_text` = VALUES(`question_text`);
 
--- Insert Initial Seed Reports for Today
-INSERT INTO `daily_reports` (
-  `id`, `client_report_id`, `technician_id`, `technician_name`, `employee_id`, `work_date`,
-  `status`, `submission_type`, `official_clock_in_time`, `server_received_at`, `server_synced_at`,
-  `expected_start_time`, `late_status`, `late_duration_minutes`, `latitude`, `longitude`,
-  `location_accuracy_meters`, `raw_gps_timestamp`, `device_monotonic_uptime_ms`, `is_time_tampered`,
-  `tamper_reason`, `photos_json`, `ehs_answers_json`, `general_comments`, `identified_hazards`,
-  `is_overridden`, `override_reason`, `overridden_by`, `overridden_at`
-) VALUES (
-  'rep-seed-01', 'c29b71a0-98fc-4c4f-b648-9366df041499', 'usr-tech-01', 'Carlos Mendez', 'EMP-1042',
-  CURDATE(), 'SYNCED', 'OFFLINE_SYNC', CONCAT(CURDATE(), 'T07:42:15.000Z'), CONCAT(CURDATE(), 'T09:15:22.000Z'),
-  CONCAT(CURDATE(), 'T09:15:22.000Z'), '08:00', 'ON_TIME', 0, 37.774929, -122.419416, 4.8,
-  CONCAT(CURDATE(), 'T07:42:14.000Z'), 348920150, 0, NULL,
-  '[{\"id\":\"photo-01-ppe\",\"clientPhotoId\":\"p-01\",\"photoType\":\"PPE_SELFIE\",\"storageKey\":\"uploads/ppe_selfie.jpg\",\"dataUrl\":\"https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80\",\"fileSizeBytes\":642100,\"mimeType\":\"image/jpeg\",\"checksumSha256\":\"5f4dcc3b5aa765d61d8327deb882cf99a8\",\"capturedAt\":\"2026-09-15T07:38:10.000Z\",\"latitude\":37.774929,\"longitude\":-122.419416,\"isVerified\":true}]',
-  '[{\"questionId\":\"ehs-q1\",\"isCompliant\":true},{\"questionId\":\"ehs-q2\",\"isCompliant\":true},{\"questionId\":\"ehs-q3\",\"isCompliant\":true},{\"questionId\":\"ehs-q4\",\"isCompliant\":true},{\"questionId\":\"ehs-q5\",\"isCompliant\":true}]',
-  'Arrived at sub-station beta on schedule. Radio check completed with dispatch.', NULL, 0, NULL, NULL, NULL
-),
-(
-  'rep-seed-02', 'd8312019-91a1-4322-8bf1-ffc728101a99', 'usr-tech-02', 'Sarah Jenkins', 'EMP-1088',
-  CURDATE(), 'SYNCED', 'ONLINE', CONCAT(CURDATE(), 'T08:18:40.000Z'), CONCAT(CURDATE(), 'T08:18:40.000Z'),
-  CONCAT(CURDATE(), 'T08:18:40.000Z'), '08:00', 'LATE', 18, 37.783333, -122.416667, 6.2,
-  CONCAT(CURDATE(), 'T08:18:39.000Z'), 198210332, 0, NULL, '[]',
-  '[{\"questionId\":\"ehs-q1\",\"isCompliant\":true},{\"questionId\":\"ehs-q2\",\"isCompliant\":true},{\"questionId\":\"ehs-q3\",\"isCompliant\":true},{\"questionId\":\"ehs-q4\",\"isCompliant\":true},{\"questionId\":\"ehs-q5\",\"isCompliant\":true}]',
-  'Major freeway bottleneck on US-101 northbound.', NULL, 0, NULL, NULL, NULL
-)
-ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP;
-
 SET FOREIGN_KEY_CHECKS = 1;

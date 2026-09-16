@@ -89,130 +89,13 @@ class FieldPulseViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
         }
-        // Seed demo records if database is empty so Admin dashboard is immediately actionable
+        // Initialize technicians if roster table is empty
         viewModelScope.launch {
-            seedDemoDataIfEmpty()
+            initTechniciansIfEmpty()
         }
     }
 
-    private suspend fun seedDemoDataIfEmpty() {
-        val currentClocks = clockDao.getPendingOfflineRecords()
-        // Check if records already exist
-        val existingClockCount = clockDao.getAllRecords().first().size
-        if (existingClockCount == 0) {
-            val now = System.currentTimeMillis()
-            clockDao.insertRecord(
-                ClockRecord(
-                    id = "clock-seed-01",
-                    technicianId = "tech-01",
-                    technicianName = "Marcus Rodriguez",
-                    type = "CLOCK_IN",
-                    timestamp = now - 3 * 3600 * 1000,
-                    latitude = 29.7604,
-                    longitude = -95.3698,
-                    accuracyMeters = 3.8f,
-                    facilityCode = "FAC-TX-HOU-04",
-                    shiftType = ShiftType.REGULAR_MORNING,
-                    verificationMethod = VerificationMethod.GEO_FENCE,
-                    syncStatus = SyncStatus.SYNCED,
-                    notes = "Shift started on schedule. All PPE verified."
-                )
-            )
-            clockDao.insertRecord(
-                ClockRecord(
-                    id = "clock-seed-02",
-                    technicianId = "tech-02",
-                    technicianName = "Carlos Mendez",
-                    type = "CLOCK_IN",
-                    timestamp = now - 2 * 3600 * 1000,
-                    latitude = 29.8100,
-                    longitude = -95.4200,
-                    accuracyMeters = 4.5f,
-                    facilityCode = "FAC-TX-GRID-07",
-                    shiftType = ShiftType.REGULAR_MORNING,
-                    verificationMethod = VerificationMethod.QR_FACILITY,
-                    syncStatus = SyncStatus.SYNCED,
-                    notes = "Substation perimeter walk complete."
-                )
-            )
-            clockDao.insertRecord(
-                ClockRecord(
-                    id = "clock-seed-03",
-                    technicianId = "tech-04",
-                    technicianName = "David Thorne",
-                    type = "CLOCK_IN",
-                    timestamp = now - 1 * 3600 * 1000,
-                    latitude = 29.7200,
-                    longitude = -95.3100,
-                    accuracyMeters = 5.1f,
-                    facilityCode = "FAC-TX-REF-02",
-                    shiftType = ShiftType.AFTERNOON_FIELD,
-                    verificationMethod = VerificationMethod.GEO_FENCE,
-                    syncStatus = SyncStatus.PENDING_OFFLINE,
-                    notes = "Pump inspection shift. Remote dead zone."
-                )
-            )
-        }
-
-        val existingIncidents = ehsDao.getAllIncidents().first().size
-        if (existingIncidents == 0) {
-            val now = System.currentTimeMillis()
-            ehsDao.insertIncident(
-                EHSIncident(
-                    id = "inc-seed-01",
-                    technicianId = "tech-01",
-                    technicianName = "Marcus Rodriguez",
-                    title = "Pressurized gas sensor alarm drift",
-                    incidentType = IncidentType.EQUIPMENT_FAILURE,
-                    riskLevel = RiskLevel.CRITICAL_STOP_WORK,
-                    description = "Auxiliary gas sensor reading 14% LEL spike. Line isolated and lock-out tag placed.",
-                    immediateActionTaken = "Halted compressor feed, evacuated perimeter, notified plant safety manager.",
-                    latitude = 29.7604,
-                    longitude = -95.3698,
-                    timestamp = now - 5 * 3600 * 1000,
-                    syncStatus = SyncStatus.SYNCED,
-                    status = "INVESTIGATING",
-                    resolutionNotes = "Technician isolated line. Awaiting calibration crew dispatch."
-                )
-            )
-            ehsDao.insertIncident(
-                EHSIncident(
-                    id = "inc-seed-02",
-                    technicianId = "tech-02",
-                    technicianName = "Carlos Mendez",
-                    title = "Frayed grounding lead on 13.8kV busbar",
-                    incidentType = IncidentType.HAZARD_IDENTIFIED,
-                    riskLevel = RiskLevel.HIGH,
-                    description = "Copper braid on secondary ground clamp showing 40% shear strand damage.",
-                    immediateActionTaken = "Tagged out secondary clamp, deployed rated backup clamp.",
-                    latitude = 29.8100,
-                    longitude = -95.4200,
-                    timestamp = now - 2 * 3600 * 1000,
-                    syncStatus = SyncStatus.SYNCED,
-                    status = "OPEN",
-                    resolutionNotes = ""
-                )
-            )
-            ehsDao.insertIncident(
-                EHSIncident(
-                    id = "inc-seed-03",
-                    technicianId = "tech-03",
-                    technicianName = "Sarah Chen",
-                    title = "Slip hazard on mezzanine grating after washdown",
-                    incidentType = IncidentType.NEAR_MISS,
-                    riskLevel = RiskLevel.MEDIUM,
-                    description = "Algae accumulation and overspray left catwalk slick during routine transit.",
-                    immediateActionTaken = "Barricaded staircase with caution tape and applied degreaser absorbent.",
-                    latitude = 29.7500,
-                    longitude = -95.3500,
-                    timestamp = now - 8 * 3600 * 1000,
-                    syncStatus = SyncStatus.SYNCED,
-                    status = "RESOLVED",
-                    resolutionNotes = "Absorbent applied, non-skid tread scheduled for re-application."
-                )
-            )
-        }
-
+    private suspend fun initTechniciansIfEmpty() {
         val existingTechCount = techDao.getCount()
         if (existingTechCount == 0) {
             techDao.insertAll(Technician.SPECTRUM_TECHNICIANS)

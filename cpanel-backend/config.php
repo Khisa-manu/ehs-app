@@ -13,17 +13,17 @@ ini_set('log_errors', '1');
 // 1. DATABASE CONFIGURATION (MySQL / MariaDB or SQLite)
 // -------------------------------------------------------------------------
 // Driver: 'mysql' for cPanel MySQL/MariaDB, or 'sqlite' for portable zero-config SQLite
-define('DB_DRIVER', getenv('DB_DRIVER') ?: 'sqlite');
+define('DB_DRIVER', getenv('DB_DRIVER') ?: 'mysql');
 
 // SQLite Settings (Used when DB_DRIVER is 'sqlite')
 define('DB_SQLITE_PATH', getenv('DB_SQLITE_PATH') ?: __DIR__ . '/fieldpulse.sqlite');
 
 // MySQL / MariaDB Settings (Used when DB_DRIVER is 'mysql')
-define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_NAME', getenv('DB_NAME') ?: 'fieldpulse_db');
-define('DB_USER', getenv('DB_USER') ?: 'root');
-define('DB_PASS', getenv('DB_PASS') ?: '');
-define('DB_PORT', getenv('DB_PORT') ?: 3306);
+define('DB_HOST', 'sql211.infinityfree.com');
+define('DB_NAME', 'if0_42929742_fieldpulse');
+define('DB_USER', 'if0_42929742');
+define('DB_PASS', 'paperglow2026');
+define('DB_PORT', 3306);
 define('DB_CHARSET', 'utf8mb4');
 
 // -------------------------------------------------------------------------

@@ -40,8 +40,8 @@ fun LoginScreen(viewModel: FieldPulseViewModel) {
     val activeTechList = if (allTechs.isNotEmpty()) allTechs else Technician.SPECTRUM_TECHNICIANS
     val focusManager = LocalFocusManager.current
 
-    var employeeId by remember { mutableStateOf("SE-7842") }
-    var pin by remember { mutableStateOf("7842") }
+    var employeeId by remember { mutableStateOf("") }
+    var pin by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
     Column(
@@ -205,7 +205,7 @@ fun LoginScreen(viewModel: FieldPulseViewModel) {
                         viewModel.clearLoginError()
                     },
                     label = { Text("Safety PIN or Password") },
-                    placeholder = { Text("Enter PIN (demo: 7842)") },
+                    placeholder = { Text("Enter Safety PIN") },
                     leadingIcon = {
                         Icon(Icons.Default.Lock, contentDescription = "Password")
                     },
@@ -295,7 +295,7 @@ fun LoginScreen(viewModel: FieldPulseViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "FAST BADGE SELECT (DEMO & TESTING)",
+                text = "AUTHORIZED BADGE ROSTER",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,

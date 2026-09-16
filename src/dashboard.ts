@@ -197,9 +197,10 @@ class DashboardApp {
       });
     });
 
-    // Trigger simulated batch sync test
-    document.getElementById('btnSimulateSync')?.addEventListener('click', () => {
-      this.simulateBatchSync();
+    // Trigger system health check
+    const btnHealth = document.getElementById('btnHealthCheck') || document.getElementById('btnSimulateSync');
+    btnHealth?.addEventListener('click', () => {
+      this.runSystemHealthCheck();
     });
 
     // Export CSV
@@ -980,71 +981,36 @@ class DashboardApp {
     }
   }
 
-  async simulateBatchSync() {
-    const btn = document.getElementById('btnSimulateSync');
+  async runSystemHealthCheck() {
+    const btn = document.getElementById('btnHealthCheck') || document.getElementById('btnSimulateSync');
     if (btn) {
       btn.classList.add('disabled');
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Transmitting...';
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Diagnosing...';
     }
 
+    const startTime = performance.now();
     try {
-      const clientReportId = `rep-sim-${Date.now()}`;
-      const nowIso = new Date().toISOString();
-      const payload = {
-        clientReportId,
-        technicianId: 'usr-tech-02',
-        technicianName: 'Marcus Rodriguez',
-        employeeId: 'SE-7842',
-        workDate: nowIso.split('T')[0],
-        clockIn: {
-          recordedAt: nowIso,
-          latitude: 29.7604,
-          longitude: -95.3698,
-          accuracyMeters: 4.1,
-          rawGpsTimestamp: nowIso,
-          deviceMonotonicUptimeMs: 8400000,
-          verificationMethod: 'GEO_FENCE',
-          shiftType: 'REGULAR_MORNING',
-          isMockLocation: false,
-        },
-        photos: [
-          {
-            clientPhotoId: `${clientReportId}-ppe`,
-            photoType: 'PPE_SELFIE',
-            dataUrl: '/uploads/2026-09-15/PPE_SELFIE_photo-ppe-1.jpg',
-            capturedAt: nowIso,
-            latitude: 29.7604,
-            longitude: -95.3698,
-          },
-        ],
-        ehsAnswers: [
-          { questionCode: 'PPE_HEAD_EYES', answerText: 'Verified ANSI helmet and glasses', isCompliant: true },
-          { questionCode: 'PPE_FOOTWEAR', answerText: 'Steel-toe boots verified', isCompliant: true },
-        ],
-        generalComments: 'Simulated automated test clock-in via Web Dashboard.',
-        isOfflineExplicit: true,
-      };
-
-      const res = await fetch('/api/v1/sync/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch('/api/v1/health');
+      const latencyMs = Math.round(performance.now() - startTime);
 
       if (res.ok) {
         const data = await res.json();
-        this.showToast(`Batch sync verified: Report ID ${data.data?.reportId || 'OK'} synced!`, 'success');
+        const dbEngine = data.database?.engine || 'Active';
+        const reportsCount = data.database?.reportsCount ?? 0;
+        this.showToast(
+          `System Healthy: Database ${dbEngine} connected (${reportsCount} reports in DB) • Latency: ${latencyMs}ms`,
+          'success'
+        );
         this.loadAllData();
       } else {
-        const err = await res.json();
-        this.showToast(`Batch sync error: ${err.error || 'Server rejected payload'}`, 'danger');
+        this.showToast(`Health check returned status ${res.status}`, 'warning');
       }
     } catch (e: any) {
-      this.showToast(`Sync test failed: ${e.message}`, 'danger');
+      this.showToast(`Health check failed: ${e.message}`, 'danger');
     } finally {
       if (btn) {
         btn.classList.remove('disabled');
-        btn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Send Test Batch Sync Payload';
+        btn.innerHTML = '<i class="bi bi-heart-pulse me-1"></i> Check Health';
       }
     }
   }

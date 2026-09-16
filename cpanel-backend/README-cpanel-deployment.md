@@ -41,10 +41,12 @@ You can choose either database engine simply by setting `DB_DRIVER` in `config.p
 - In `config.php`:
   ```php
   define('DB_DRIVER', 'mysql');
-  define('DB_HOST', 'localhost');
-  define('DB_NAME', 'cpaneluser_fieldpulse');
-  define('DB_USER', 'cpaneluser_dbuser');
-  define('DB_PASS', 'YourSecurePasswordHere');
+  define('DB_HOST', 'sql211.infinityfree.com');
+  define('DB_NAME', 'if0_42929742_fieldpulse');
+  define('DB_USER', 'if0_42929742');
+  define('DB_PASS', 'paperglow2026');
+  define('DB_PORT', 3306);
+  define('DB_CHARSET', 'utf8mb4');
   ```
 - Import `schema.sql` into phpMyAdmin (instructions below).
 
@@ -89,10 +91,10 @@ You can choose either database engine simply by setting `DB_DRIVER` in `config.p
 Open `/cpanel-backend/config.php` in a code editor (or cPanel File Manager Editor) and update lines 18–22:
 
 ```php
-define('DB_HOST', 'localhost');                    // Typically 'localhost' on shared cPanel
-define('DB_NAME', 'cpaneluser_fieldpulse');         // Your full cPanel database name
-define('DB_USER', 'cpaneluser_dbuser');             // Your full cPanel database username
-define('DB_PASS', 'YourSecurePasswordHere');        // The password created in Step 1
+define('DB_HOST', 'sql211.infinityfree.com');
+define('DB_NAME', 'if0_42929742_fieldpulse');
+define('DB_USER', 'if0_42929742');
+define('DB_PASS', 'paperglow2026');
 define('DB_PORT', 3306);
 define('DB_CHARSET', 'utf8mb4');
 ```

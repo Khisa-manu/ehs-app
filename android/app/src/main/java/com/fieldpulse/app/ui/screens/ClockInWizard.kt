@@ -150,9 +150,6 @@ fun ClockInWizard(
     // Shift selection
     var selectedShift by remember { mutableStateOf(ShiftType.REGULAR_MORNING) }
 
-    // 07:42 AM test scenario toggle
-    var usePromptDemoTime by remember { mutableStateOf(false) }
-
     var isSubmitting by remember { mutableStateOf(false) }
     var submitError by remember { mutableStateOf<String?>(null) }
 
@@ -320,8 +317,6 @@ fun ClockInWizard(
                         vehiclePhotoUri = vehiclePhotoUri,
                         ladderPhotoUri = ladderPhotoUri,
                         questions = questions,
-                        usePromptDemoTime = usePromptDemoTime,
-                        onToggleDemoTime = { usePromptDemoTime = it },
                         selectedShift = selectedShift,
                         onShiftSelected = { selectedShift = it },
                         submitError = submitError
@@ -392,16 +387,7 @@ fun ClockInWizard(
                             isSubmitting = true
                             submitError = null
 
-                            // Calculate custom timestamp if 07:42 AM demo is enabled
-                            val timestamp = if (usePromptDemoTime) {
-                                val cal = Calendar.getInstance()
-                                cal.set(Calendar.HOUR_OF_DAY, 7)
-                                cal.set(Calendar.MINUTE, 42)
-                                cal.set(Calendar.SECOND, 15)
-                                cal.timeInMillis
-                            } else {
-                                System.currentTimeMillis()
-                            }
+                            val timestamp = System.currentTimeMillis()
 
                             val allPassed = questions.count { it.isCompliant }
 
@@ -919,8 +905,6 @@ fun ReviewStepView(
     vehiclePhotoUri: String?,
     ladderPhotoUri: String?,
     questions: List<EHSQuestionItem>,
-    usePromptDemoTime: Boolean,
-    onToggleDemoTime: (Boolean) -> Unit,
     selectedShift: ShiftType,
     onShiftSelected: (ShiftType) -> Unit,
     submitError: String?
@@ -953,46 +937,6 @@ fun ReviewStepView(
                         )
                     }
                 }
-            }
-        }
-
-        // Test Scenario Helper Card (07:42 AM Arrival)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-            shape = RoundedCornerShape(16.dp),
-            border = CardDefaults.outlinedCardBorder().copy(
-                brush = Brush.horizontalGradient(listOf(Amber500.copy(alpha = 0.4f), Amber500.copy(alpha = 0.4f)))
-            )
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccessTime, contentDescription = null, tint = Amber500, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Test Scenario: Record at 07:42 AM",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Amber500
-                        )
-                    }
-                    Switch(
-                        checked = usePromptDemoTime,
-                        onCheckedChange = onToggleDemoTime
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Toggle to simulate the exact test case: Record clock-in at 07:42 AM. The server will preserve 07:42 as your official arrival time even if synchronized hours later!",
-                    fontSize = 11.sp,
-                    color = Color(0xFF94A3B8),
-                    lineHeight = 16.sp
-                )
             }
         }
 
@@ -1031,7 +975,7 @@ fun ReviewStepView(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val recordTimeStr = if (usePromptDemoTime) "07:42:15 AM" else SimpleDateFormat("HH:mm:ss a", Locale.getDefault()).format(Date())
+                val recordTimeStr = SimpleDateFormat("HH:mm:ss a", Locale.getDefault()).format(Date())
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     InfoTile(label = "Arrival Recorded", value = recordTimeStr, modifier = Modifier.weight(1f))
                     InfoTile(label = "Expected Start", value = "08:00 AM", modifier = Modifier.weight(1f))

@@ -172,57 +172,6 @@ function initSqliteDatabase(): DatabaseSync {
   ensureUser('usr-tech-02', 'marcus.rodriguez@spectrum-ehs.com', 'Marcus Rodriguez', 'TECHNICIAN', 'SE-7842', '(415) 720-3391', '08:00');
   ensureUser('usr-tech-03', 'sarah.chen@spectrum-ehs.com', 'Sarah Chen', 'TECHNICIAN', 'SE-5021', '(415) 441-9982', '08:00');
 
-  // Seed sample incidents if table is empty
-  try {
-    const incCount = (db.prepare('SELECT COUNT(*) as c FROM ehs_incidents').get() as any)?.c || 0;
-    if (incCount === 0) {
-      db.prepare(`
-        INSERT INTO ehs_incidents (id, technician_id, technician_name, title, incident_type, risk_level, description, immediate_action_taken, latitude, longitude, photo_url, status, resolution_notes)
-        VALUES 
-        ('inc-01', 'usr-tech-02', 'Marcus Rodriguez', 'Pressurized gas sensor alarm drift', 'EQUIPMENT_FAILURE', 'CRITICAL_STOP_WORK', 'Auxiliary gas sensor reading 14% LEL spike. Line isolated and lock-out tag placed.', 'Halted compressor feed, evacuated perimeter, notified plant safety manager.', 29.7604, -95.3698, '/uploads/2026-09-15/INCIDENT_inc-test-02.jpg', 'INVESTIGATING', 'Line isolated. Awaiting calibration crew dispatch.'),
-        ('inc-02', 'usr-tech-01', 'Carlos Mendez', 'Frayed grounding lead on 13.8kV busbar', 'HAZARD_IDENTIFIED', 'HIGH', 'Copper braid on secondary ground clamp showing 40% shear strand damage.', 'Tagged out secondary clamp, deployed rated backup clamp.', 29.8100, -95.4200, null, 'OPEN', ''),
-        ('inc-03', 'usr-tech-03', 'Sarah Chen', 'Slip hazard on mezzanine catwalk after washdown', 'NEAR_MISS', 'MEDIUM', 'Algae accumulation and overspray left catwalk slick during routine transit.', 'Barricaded staircase with caution tape and applied degreaser absorbent.', 29.7500, -95.3500, null, 'RESOLVED', 'Non-skid tread applied and sign posted.')
-      `).run();
-    }
-  } catch (e) {
-    console.error('[SQLite] Error seeding sample incidents:', e);
-  }
-
-  // Seed sample daily reports if table is empty
-  try {
-    const repCount = (db.prepare('SELECT COUNT(*) as c FROM daily_reports').get() as any)?.c || 0;
-    if (repCount === 0) {
-      const today = new Date().toISOString().split('T')[0];
-      const nowIso = new Date().toISOString();
-      const ppePhoto = '/uploads/2026-09-15/PPE_SELFIE_photo-ppe-1.jpg';
-      const photos1 = JSON.stringify([
-        { clientPhotoId: 'photo-1', photoType: 'PPE_SELFIE', dataUrl: ppePhoto, capturedAt: nowIso, latitude: 29.7604, longitude: -95.3698 },
-        { clientPhotoId: 'photo-2', photoType: 'TOOLS_MACHINERY', dataUrl: '', capturedAt: nowIso, latitude: 29.7604, longitude: -95.3698 },
-        { clientPhotoId: 'photo-3', photoType: 'VEHICLE_360', dataUrl: '', capturedAt: nowIso, latitude: 29.7604, longitude: -95.3698 },
-        { clientPhotoId: 'photo-4', photoType: 'LADDER_SAFETY', dataUrl: '', capturedAt: nowIso, latitude: 29.7604, longitude: -95.3698 }
-      ]);
-      const ehsAnswers = JSON.stringify([
-        { questionCode: 'PPE_HEAD_EYES', answerText: 'Verified and worn', isCompliant: true },
-        { questionCode: 'PPE_FOOTWEAR', answerText: 'Verified compliant', isCompliant: true },
-        { questionCode: 'VEHICLE_INSPECT', answerText: '360 circle check completed', isCompliant: true }
-      ]);
-
-      db.prepare(`
-        INSERT INTO daily_reports (
-          id, client_report_id, technician_id, technician_name, employee_id, work_date, status, submission_type,
-          official_clock_in_time, server_received_at, server_synced_at, expected_start_time, late_status, late_duration_minutes,
-          latitude, longitude, location_accuracy_meters, photos_json, ehs_answers_json, general_comments
-        ) VALUES
-        ('rep-01', 'rep-client-01', 'usr-tech-02', 'Marcus Rodriguez', 'SE-7842', ?, 'SYNCED', 'ONLINE',
-         ? || 'T07:42:00.000Z', ?, ?, '08:00', 'ON_TIME', 0, 29.7604, -95.3698, 4.2, ?, ?, 'Shift started on schedule. All PPE inspected.'),
-        ('rep-02', 'rep-client-02', 'usr-tech-01', 'Carlos Mendez', 'SE-1042', ?, 'SYNCED', 'OFFLINE_SYNC',
-         ? || 'T08:14:00.000Z', ?, ?, '07:30', 'LATE', 44, 29.8100, -95.4200, 3.8, '[]', ?, 'Substation inspection. Offline sync upon network restore.')
-      `).run(today, today, nowIso, nowIso, photos1, ehsAnswers, today, today, nowIso, nowIso, ehsAnswers);
-    }
-  } catch (e) {
-    console.error('[SQLite] Error seeding sample daily reports:', e);
-  }
-
   return db;
 }
 
