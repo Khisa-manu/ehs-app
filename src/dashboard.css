@@ -1,0 +1,212 @@
+/* Spectrum Engineering EHS - Web Dashboard Custom Styles (HTML/CSS/JS + Bootstrap) */
+
+:root {
+  --se-primary: #f59e0b;
+  --se-primary-hover: #d97706;
+  --se-dark: #0f172a;
+  --se-dark-surface: #1e293b;
+  --se-border: #334155;
+  --se-light-bg: #f8fafc;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: var(--se-light-bg);
+  color: #1e293b;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Navbar */
+.navbar-custom {
+  background-color: var(--se-dark) !important;
+  border-bottom: 1px solid var(--se-border);
+}
+
+.brand-badge {
+  background: var(--se-primary);
+  color: var(--se-dark);
+  font-weight: 900;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.9rem;
+  letter-spacing: 0.5px;
+}
+
+/* Sidebar Nav */
+.sidebar-container {
+  background-color: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  min-height: calc(100vh - 60px);
+}
+
+.sidebar-nav .nav-link {
+  color: #475569;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s ease-in-out;
+}
+
+.sidebar-nav .nav-link i {
+  font-size: 1.15rem;
+  margin-right: 10px;
+  color: #64748b;
+  transition: color 0.15s;
+}
+
+.sidebar-nav .nav-link:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.sidebar-nav .nav-link:hover i {
+  color: var(--se-primary);
+}
+
+.sidebar-nav .nav-link.active {
+  background-color: #0f172a;
+  color: #ffffff;
+}
+
+.sidebar-nav .nav-link.active i {
+  color: var(--se-primary);
+}
+
+/* Metric Cards */
+.kpi-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background-color: #ffffff;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+}
+
+.kpi-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+/* Risk Badges */
+.badge-critical {
+  background-color: #ef4444;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.badge-high {
+  background-color: #f97316;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.badge-medium {
+  background-color: #f59e0b;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.badge-low {
+  background-color: #10b981;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.badge-ontime {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  font-weight: 600;
+}
+
+.badge-late {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  font-weight: 600;
+}
+
+/* Evidence photo thumbnail */
+.photo-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #cbd5e1;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.photo-thumb:hover {
+  transform: scale(1.08);
+  border-color: var(--se-primary);
+}
+
+.photo-thumb-empty {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  background-color: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+/* Live indicator */
+.pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

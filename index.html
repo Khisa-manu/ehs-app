@@ -2,29 +2,893 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#D32F2F" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Spectrum EHS" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0F172A" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <title>Spectrum Engineering EHS — Field Technician & Safety Portal</title>
+    <title>Spectrum Engineering EHS — Web Dashboard</title>
     <meta name="description" content="Spectrum Engineering EHS field technician clock-in, hazard reporting, and safety management system with secure authentication, offline sync, and tamper verification." />
-    <meta property="og:title" content="Spectrum Engineering EHS — Field Technician & Safety Portal" />
+    <meta property="og:title" content="Spectrum Engineering EHS — Web Dashboard" />
     <meta property="og:description" content="Spectrum Engineering EHS field technician clock-in, hazard reporting, and safety management system with secure authentication, offline sync, and tamper verification." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5 & Bootstrap Icons (CDN Fallback & Global Styles) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body class="bg-light">
+
+    <!-- TOP NAVIGATION BAR -->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top py-2 px-3 shadow-sm" id="topNav">
+      <div class="container-fluid">
+        <!-- Brand -->
+        <a class="navbar-brand d-flex align-items-center text-decoration-none" href="#">
+          <span class="brand-badge me-2">SE</span>
+          <div>
+            <div class="fw-bold text-white lh-1 fs-6">Spectrum Engineering EHS</div>
+            <span class="text-secondary small font-monospace" style="font-size: 0.72rem;">Field & Safety Operations Portal</span>
+          </div>
+        </a>
+
+        <!-- Mobile Toggler -->
+        <button class="navbar-toggler border-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <!-- Navbar Controls -->
+        <div class="collapse navbar-collapse" id="navbarContent">
+          <div class="ms-auto d-flex flex-wrap align-items-center gap-2 mt-2 mt-lg-0">
+            <!-- Server Status Badge -->
+            <span id="serverStatusBadge" class="badge bg-success text-white d-inline-flex align-items-center px-2 py-1">
+              <span class="pulse-dot me-2"></span> SQLite API Online
+            </span>
+
+            <!-- Auto-Refresh Toggle -->
+            <button id="btnToggleAutoRefresh" class="btn btn-sm btn-outline-secondary text-light d-flex align-items-center" title="Toggle 10s auto-refresh">
+              <i id="autoRefreshIcon" class="bi bi-pause-fill me-1"></i>
+              <span id="autoRefreshText">Pause</span>
+            </button>
+
+            <!-- Manual Refresh -->
+            <button id="btnRefresh" class="btn btn-sm btn-outline-light d-flex align-items-center">
+              <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+            </button>
+
+            <!-- New Incident Action Button -->
+            <button class="btn btn-sm btn-warning text-dark fw-bold d-flex align-items-center shadow-sm" data-bs-toggle="modal" data-bs-target="#modalReportIncident">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i> Report Incident
+            </button>
+
+            <!-- Add Tech Action Button -->
+            <button class="btn btn-sm btn-outline-info text-white d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#modalAddTech">
+              <i class="bi bi-person-plus-fill me-1"></i> Add Tech
+            </button>
+
+            <!-- User Switcher Dropdown -->
+            <div class="dropdown">
+              <button class="btn btn-sm btn-dark border-secondary text-light dropdown-toggle d-flex align-items-center" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-person-circle me-1 text-warning"></i>
+                <span id="currentUserDisplay">Rachel Hayes (Supervisor)</span>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark shadow">
+                <li><h6 class="dropdown-header">Switch Simulated Role</h6></li>
+                <li><a class="dropdown-item btn-switch-user" href="#" data-user-name="Rachel Hayes" data-user-role="SUPER_ADMIN">Rachel Hayes (Super Admin)</a></li>
+                <li><a class="dropdown-item btn-switch-user" href="#" data-user-name="Marcus Rodriguez" data-user-role="TECHNICIAN">Marcus Rodriguez (Field Tech)</a></li>
+                <li><a class="dropdown-item btn-switch-user" href="#" data-user-name="Carlos Mendez" data-user-role="TECHNICIAN">Carlos Mendez (Field Tech)</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-danger" href="#" onclick="location.reload()"><i class="bi bi-box-arrow-right me-1"></i> Reset Session</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- CRITICAL HAZARD ALERT BANNER -->
+    <div id="criticalHazardBanner" class="alert alert-danger rounded-0 border-0 border-bottom border-danger mb-0 py-2 px-3 d-none" role="alert">
+      <div class="container-fluid d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-exclamation-octagon-fill fs-4 me-2 text-danger"></i>
+          <div>
+            <strong id="criticalCountText" class="text-uppercase fw-bold">CRITICAL STOP-WORK HAZARD DETECTED</strong>:
+            <span id="criticalDescText" class="small ms-1">High-priority safety issue requires dispatch oversight.</span>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-danger fw-bold" onclick="window.dashboardApp.switchTab('hazards')">
+          View Hazards Triage <i class="bi bi-arrow-right"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN CONTAINER WITH SIDEBAR & CONTENT -->
+    <div class="container-fluid">
+      <div class="row">
+        
+        <!-- SIDEBAR NAVIGATION -->
+        <div class="col-md-3 col-lg-2 sidebar-container p-3 d-none d-md-block">
+          <div class="text-uppercase small fw-bold text-secondary mb-3 px-2" style="font-size: 0.75rem; letter-spacing: 0.05em;">
+            Safety Operations
+          </div>
+          <ul class="nav flex-column sidebar-nav">
+            <li class="nav-item">
+              <a class="nav-link active" href="#" data-tab="overview">
+                <i class="bi bi-speedometer2"></i> Overview
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-tab="clockins">
+                <i class="bi bi-clock-history"></i> Clock-Ins & Shifts
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-tab="hazards">
+                <i class="bi bi-shield-exclamation"></i> EHS Hazard Triage
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-tab="technicians">
+                <i class="bi bi-people-fill"></i> Technicians
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-tab="photos">
+                <i class="bi bi-images"></i> Evidence Photos
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-tab="sync">
+                <i class="bi bi-cloud-arrow-up"></i> Sync & Audit Logs
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-tab="mobile">
+                <i class="bi bi-android2"></i> Android Mobile App
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-tab="diagnostics">
+                <i class="bi bi-cpu"></i> API Diagnostics
+              </a>
+            </li>
+          </ul>
+
+          <hr class="my-4 text-secondary">
+
+          <div class="px-2 small text-secondary">
+            <div class="fw-semibold text-dark">Database Engine</div>
+            <div class="font-mono text-muted" style="font-size: 0.75rem;">SQLite 3 (WAL Mode)</div>
+            <div class="mt-2 text-muted" style="font-size: 0.72rem;">Last Updated: <span id="lastUpdatedTime">--:--</span></div>
+          </div>
+        </div>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="col-md-9 col-lg-10 p-4">
+
+          <!-- 1. SECTION: OVERVIEW -->
+          <section id="sec-overview" class="content-section">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <div>
+                <h4 class="fw-bold mb-1">Safety & Field Operations Overview</h4>
+                <p class="text-secondary small mb-0">Live monitoring of field technician clock-ins, EHS safety compliance, and active hazard triage.</p>
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.dashboardApp.switchTab('clockins')">
+                  <i class="bi bi-table me-1"></i> View All Shifts
+                </button>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalReportIncident">
+                  <i class="bi bi-plus-circle me-1"></i> Log Incident
+                </button>
+              </div>
+            </div>
+
+            <!-- KPI Metric Cards Grid -->
+            <div class="row g-3 mb-4">
+              <!-- Total Technicians -->
+              <div class="col-sm-6 col-xl-3">
+                <div class="card kpi-card p-3 h-100">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div class="text-secondary small fw-semibold">Active Techs</div>
+                      <h3 class="fw-bold my-1 text-dark" id="kpiTotalTechs">--</h3>
+                      <div class="small text-muted">Registered in roster</div>
+                    </div>
+                    <div class="kpi-icon-box bg-primary-subtle text-primary">
+                      <i class="bi bi-people-fill"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Clocked In Today -->
+              <div class="col-sm-6 col-xl-3">
+                <div class="card kpi-card p-3 h-100">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div class="text-secondary small fw-semibold">Clocked In Today</div>
+                      <h3 class="fw-bold my-1 text-dark" id="kpiClockedIn">-- / --</h3>
+                      <div class="small text-success fw-semibold"><i class="bi bi-check2-circle"></i> On-duty today</div>
+                    </div>
+                    <div class="kpi-icon-box bg-success-subtle text-success">
+                      <i class="bi bi-clock-fill"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- On-Time Rate -->
+              <div class="col-sm-6 col-xl-3">
+                <div class="card kpi-card p-3 h-100">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div class="text-secondary small fw-semibold">Punctuality Rate</div>
+                      <h3 class="fw-bold my-1 text-dark" id="kpiOnTimePercent">--%</h3>
+                      <div class="small text-muted">Within 5m grace window</div>
+                    </div>
+                    <div class="kpi-icon-box bg-info-subtle text-info">
+                      <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Critical Hazards -->
+              <div class="col-sm-6 col-xl-3">
+                <div class="card kpi-card p-3 h-100">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div class="text-secondary small fw-semibold">Active Hazards</div>
+                      <h3 class="fw-bold my-1 text-danger" id="kpiCriticalHazards">--</h3>
+                      <div class="small text-danger fw-semibold">Critical / High priority</div>
+                    </div>
+                    <div class="kpi-icon-box bg-danger-subtle text-danger">
+                      <i class="bi bi-shield-slash-fill"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Attendance Progress Banner -->
+            <div class="card border mb-4 shadow-sm">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="fw-bold small text-dark"><i class="bi bi-calendar2-check me-1"></i> Today's Workforce Attendance Completion</span>
+                  <span class="badge bg-secondary font-mono">Target: 08:00 AM CST</span>
+                </div>
+                <div class="progress" style="height: 18px;">
+                  <div id="attendanceProgressBar" class="progress-bar bg-success progress-bar-striped progress-bar-animated font-mono fw-bold" style="width: 0%;">
+                    0%
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Action & Recent Activity Split -->
+            <div class="row g-4">
+              <!-- Quick Operations -->
+              <div class="col-lg-5">
+                <div class="card border shadow-sm h-100">
+                  <div class="card-header bg-white fw-bold py-3">
+                    <i class="bi bi-lightning-charge-fill text-warning me-1"></i> Operational Quick Actions
+                  </div>
+                  <div class="card-body d-flex flex-column gap-3">
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light border">
+                      <div>
+                        <div class="fw-bold small">Simulate Batch Sync</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Test mobile offline packet upload to SQLite API</div>
+                      </div>
+                      <button id="btnSimulateSync" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-cloud-arrow-up me-1"></i> Send Test Packet
+                      </button>
+                    </div>
+
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light border">
+                      <div>
+                        <div class="fw-bold small">Export Compliance CSV</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Download full daily clock-in & EHS audit log</div>
+                      </div>
+                      <button id="btnExportCsv" class="btn btn-sm btn-outline-success">
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i> Download CSV
+                      </button>
+                    </div>
+
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light border">
+                      <div>
+                        <div class="fw-bold small">Download Android APK</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Install field technician app on phones/tablets</div>
+                      </div>
+                      <button class="btn btn-sm btn-outline-dark" onclick="window.dashboardApp.switchTab('mobile')">
+                        <i class="bi bi-android2 me-1"></i> APK Portal
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Recent Activity Stream -->
+              <div class="col-lg-7">
+                <div class="card border shadow-sm h-100">
+                  <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-activity text-primary me-1"></i> Real-Time Operations Activity Feed</span>
+                    <span class="badge bg-light text-secondary border">Live Updates</span>
+                  </div>
+                  <ul class="list-group list-group-flush" id="recentActivityList">
+                    <li class="list-group-item text-center text-muted py-4">
+                      <div class="spinner-border spinner-border-sm me-2"></div> Fetching live events...
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 2. SECTION: CLOCK-INS & ATTENDANCE -->
+          <section id="sec-clockins" class="content-section d-none">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+              <div>
+                <h4 class="fw-bold mb-1">Field Technician Clock-Ins & Shift Records</h4>
+                <p class="text-secondary small mb-0">GPS-verified attendance records with multi-factor PPE and vehicle photo evidence.</p>
+              </div>
+              <span id="clockInsCountBadge" class="badge bg-secondary">0 entries</span>
+            </div>
+
+            <!-- Filters Bar -->
+            <div class="card border shadow-sm p-3 mb-3 bg-white">
+              <div class="row g-2 align-items-center">
+                <div class="col-md-3">
+                  <label class="form-label small fw-bold text-secondary mb-1">Date Filter</label>
+                  <select id="filterDate" class="form-select form-select-sm">
+                    <option value="ALL">All Recorded Dates</option>
+                    <option value="TODAY" selected>Today Only</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small fw-bold text-secondary mb-1">Punctuality</label>
+                  <select id="filterStatus" class="form-select form-select-sm">
+                    <option value="ALL">All Punctuality Statuses</option>
+                    <option value="ON_TIME">On Time Only</option>
+                    <option value="LATE">Late Only</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small fw-bold text-secondary mb-1">Search Technician or Employee ID</label>
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                    <input type="text" id="searchClockIns" class="form-control" placeholder="Type name, SE-XXXX, or keyword..." />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Clock-Ins Table -->
+            <div class="card border shadow-sm overflow-hidden">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <thead class="table-dark">
+                    <tr>
+                      <th scope="col">Technician</th>
+                      <th scope="col">Work Date & Time</th>
+                      <th scope="col">Punctuality</th>
+                      <th scope="col">GPS Location</th>
+                      <th scope="col">Sync Mode</th>
+                      <th scope="col">Evidence Photos</th>
+                      <th scope="col">Comments</th>
+                    </tr>
+                  </thead>
+                  <tbody id="clockInsTableBody">
+                    <tr>
+                      <td colspan="7" class="text-center py-4 text-muted">
+                        <div class="spinner-border spinner-border-sm me-2"></div> Loading shift reports...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 3. SECTION: EHS HAZARD TRIAGE -->
+          <section id="sec-hazards" class="content-section d-none">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+              <div>
+                <h4 class="fw-bold mb-1">EHS Hazard & Incident Triage</h4>
+                <p class="text-secondary small mb-0">Real-time incident reporting, risk evaluation, and resolution management.</p>
+              </div>
+              <div class="d-flex gap-2">
+                <span id="hazardsCountBadge" class="badge bg-secondary align-self-center">0 total</span>
+                <button class="btn btn-warning btn-sm text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#modalReportIncident">
+                  <i class="bi bi-plus-lg me-1"></i> Log Safety Incident
+                </button>
+              </div>
+            </div>
+
+            <!-- Hazard Filter Buttons -->
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <button class="btn btn-sm btn-outline-secondary filter-hazard-btn active" data-filter="ALL">All Hazards</button>
+              <button class="btn btn-sm btn-outline-danger filter-hazard-btn" data-filter="CRITICAL">Critical Stop-Work</button>
+              <button class="btn btn-sm btn-outline-warning text-dark filter-hazard-btn" data-filter="HIGH">High Risk</button>
+              <button class="btn btn-sm btn-outline-secondary filter-hazard-btn" data-filter="OPEN">Open Only</button>
+              <button class="btn btn-sm btn-outline-success filter-hazard-btn" data-filter="RESOLVED">Resolved Only</button>
+            </div>
+
+            <!-- Hazard Incidents Container -->
+            <div id="hazardsListContainer">
+              <div class="text-center text-muted p-5">
+                <div class="spinner-border spinner-border-sm me-2"></div> Loading hazards...
+              </div>
+            </div>
+          </section>
+
+          <!-- 4. SECTION: TECHNICIANS DIRECTORY -->
+          <section id="sec-technicians" class="content-section d-none">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div>
+                <h4 class="fw-bold mb-1">Field Technicians Directory</h4>
+                <p class="text-secondary small mb-0">Roster of active technicians, employee badge IDs, shift schedules, and credentials.</p>
+              </div>
+              <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddTech">
+                <i class="bi bi-person-plus-fill me-1"></i> Add Technician
+              </button>
+            </div>
+
+            <div class="row" id="techListContainer">
+              <div class="col-12 text-center text-muted p-5">
+                <div class="spinner-border spinner-border-sm me-2"></div> Loading roster...
+              </div>
+            </div>
+          </section>
+
+          <!-- 5. SECTION: EVIDENCE PHOTO VAULT -->
+          <section id="sec-photos" class="content-section d-none">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div>
+                <h4 class="fw-bold mb-1">Evidence Photo Vault</h4>
+                <p class="text-secondary small mb-0">Watermarked field photos for PPE verification, vehicle 360 inspections, and incident proof.</p>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <span id="photoCountBadge" class="badge bg-secondary">0 photos</span>
+                <select id="photoFilterSelect" class="form-select form-select-sm" style="width: 200px;">
+                  <option value="ALL">All Categories</option>
+                  <option value="PPE_SELFIE">PPE Verification</option>
+                  <option value="TOOLS_MACHINERY">Tools & Machinery</option>
+                  <option value="VEHICLE_360">Vehicle Inspection</option>
+                  <option value="LADDER_SAFETY">Ladder Safety</option>
+                  <option value="INCIDENT_PROOF">Incident Proof</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row g-3" id="photoVaultContainer">
+              <div class="col-12 text-center text-muted p-5">
+                <div class="spinner-border spinner-border-sm me-2"></div> Loading photo vault...
+              </div>
+            </div>
+          </section>
+
+          <!-- 6. SECTION: OFFLINE & SYNC LOGS -->
+          <section id="sec-sync" class="content-section d-none">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div>
+                <h4 class="fw-bold mb-1">Offline Sync Engine & Audit Logs</h4>
+                <p class="text-secondary small mb-0">Monitor background sync packet payloads, SQLite write transactions, and security audit logs.</p>
+              </div>
+              <button class="btn btn-outline-success btn-sm" id="btnSyncExportCsv" onclick="window.location.href='/api/v1/admin/reports/export'">
+                <i class="bi bi-download me-1"></i> Export Audit CSV
+              </button>
+            </div>
+
+            <div class="row g-3">
+              <!-- Sync Engine Status Card -->
+              <div class="col-lg-5">
+                <div class="card border shadow-sm mb-3">
+                  <div class="card-header bg-white fw-bold py-3">
+                    <i class="bi bi-hdd-network text-primary me-1"></i> Sync Pipeline Status
+                  </div>
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <div class="d-flex justify-content-between small mb-1">
+                        <span class="text-muted">Batch Endpoint</span>
+                        <span class="font-mono fw-bold">/api/v1/sync/batch</span>
+                      </div>
+                      <div class="d-flex justify-content-between small mb-1">
+                        <span class="text-muted">Database Engine</span>
+                        <span class="font-mono">SQLite 3 (WAL mode)</span>
+                      </div>
+                      <div class="d-flex justify-content-between small mb-1">
+                        <span class="text-muted">Tamper Verification</span>
+                        <span class="badge bg-success">Device Monotonic Clock</span>
+                      </div>
+                      <div class="d-flex justify-content-between small mb-1">
+                        <span class="text-muted">Max Offline Retention</span>
+                        <span>14 Days</span>
+                      </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-sm w-100 mb-2" onclick="window.dashboardApp.simulateBatchSync()">
+                      <i class="bi bi-arrow-repeat me-1"></i> Send Test Batch Sync Payload
+                    </button>
+                    <div class="small text-muted text-center" style="font-size: 0.72rem;">
+                      Sends simulated multi-photo clock-in payload to verify SQLite write lock.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Audit Logs Table -->
+              <div class="col-lg-7">
+                <div class="card border shadow-sm">
+                  <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-journal-text text-secondary me-1"></i> System Security & Audit Log</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="window.dashboardApp.renderSyncAuditLogs()">
+                      <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                  </div>
+                  <div id="auditLogList" style="max-height: 480px; overflow-y: auto;">
+                    <div class="p-3 text-center text-muted">Loading logs...</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 7. SECTION: ANDROID APK & MOBILE APP -->
+          <section id="sec-mobile" class="content-section d-none">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div>
+                <h4 class="fw-bold mb-1">Android Mobile Application (FieldPulse EHS)</h4>
+                <p class="text-secondary small mb-0">Native Kotlin/Jetpack Compose Android app built for field technicians.</p>
+              </div>
+              <span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i> Android Studio Ready</span>
+            </div>
+
+            <div class="row g-4">
+              <!-- Android APK Card -->
+              <div class="col-lg-6">
+                <div class="card border shadow-sm h-100">
+                  <div class="card-header bg-dark text-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-android2 text-success me-2 fs-5"></i> FieldPulse Android Client</span>
+                    <span class="badge bg-success">v1.0.0</span>
+                  </div>
+                  <div class="card-body">
+                    <p class="small text-secondary">
+                      The Android application is located in the <code>/android</code> folder. It features:
+                    </p>
+                    <ul class="small text-secondary mb-4">
+                      <li><strong>Zero Network Dependency</strong>: Full offline clock-in with Room SQLite.</li>
+                      <li><strong>CameraX Photo Capture</strong>: High-resolution PPE, vehicle 360, and hazard photos.</li>
+                      <li><strong>Tamper Proofing</strong>: Monotonic hardware uptime validation and GPS mock prevention.</li>
+                      <li><strong>WorkManager Background Sync</strong>: Automatic upload when WiFi/Cellular restores.</li>
+                    </ul>
+
+                    <div class="bg-light p-3 rounded border mb-3">
+                      <div class="fw-bold small mb-1"><i class="bi bi-terminal me-1"></i> Build APK in Android Studio:</div>
+                      <code class="small text-dark d-block mb-2">1. Open the <strong>/android</strong> folder in Android Studio</code>
+                      <code class="small text-dark d-block mb-2">2. Click <strong>Build &gt; Build Bundle(s) / APK(s) &gt; Build APK(s)</strong></code>
+                      <code class="small text-dark d-block">3. Deploy to phone via USB Debugging or Emulator</code>
+                    </div>
+
+                    <a href="/app-debug.apk" class="btn btn-success fw-bold w-100" download>
+                      <i class="bi bi-download me-1"></i> Download Debug APK (if compiled)
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Test Credentials Card -->
+              <div class="col-lg-6">
+                <div class="card border shadow-sm h-100">
+                  <div class="card-header bg-white fw-bold py-3">
+                    <i class="bi bi-key-fill text-warning me-1"></i> Mobile App Test Credentials
+                  </div>
+                  <div class="card-body">
+                    <p class="small text-secondary mb-3">
+                      Use these pre-seeded technician badges to log in to the Android app:
+                    </p>
+                    <table class="table table-sm table-bordered small">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Technician</th>
+                          <th>Employee ID</th>
+                          <th>Default PIN</th>
+                          <th>Scheduled Shift</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Marcus Rodriguez</td>
+                          <td><span class="font-mono fw-bold">SE-7842</span></td>
+                          <td><span class="font-mono">7842</span></td>
+                          <td>08:00 AM</td>
+                        </tr>
+                        <tr>
+                          <td>Carlos Mendez</td>
+                          <td><span class="font-mono fw-bold">SE-1042</span></td>
+                          <td><span class="font-mono">7842</span></td>
+                          <td>07:30 AM</td>
+                        </tr>
+                        <tr>
+                          <td>Sarah Chen</td>
+                          <td><span class="font-mono fw-bold">SE-5021</span></td>
+                          <td><span class="font-mono">7842</span></td>
+                          <td>08:00 AM</td>
+                        </tr>
+                        <tr>
+                          <td>Elena Rostova</td>
+                          <td><span class="font-mono fw-bold">SE-1155</span></td>
+                          <td><span class="font-mono">7842</span></td>
+                          <td>08:30 AM</td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <div class="alert alert-info py-2 px-3 small mb-0">
+                      <i class="bi bi-info-circle-fill me-1"></i>
+                      <strong>Emulator Network:</strong> When testing in the Android Emulator, use <code>http://10.0.2.2:3000</code> as the Server Base URL.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 8. SECTION: API DIAGNOSTICS -->
+          <section id="sec-diagnostics" class="content-section d-none">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div>
+                <h4 class="fw-bold mb-1">System & API Diagnostics</h4>
+                <p class="text-secondary small mb-0">Check live server connectivity, SQLite engine metrics, and REST endpoint status.</p>
+              </div>
+              <button class="btn btn-outline-primary btn-sm" onclick="window.dashboardApp.checkServerHealth()">
+                <i class="bi bi-arrow-clockwise me-1"></i> Retest API
+              </button>
+            </div>
+
+            <div class="card border shadow-sm p-4">
+              <div class="row g-4">
+                <div class="col-md-6">
+                  <h6 class="fw-bold"><i class="bi bi-check2-all text-success me-1"></i> Active REST API Routes</h6>
+                  <ul class="list-group list-group-flush small">
+                    <li class="list-group-item d-flex justify-content-between align-items-center font-mono py-2">
+                      <span>GET /api/v1/health</span>
+                      <span class="badge bg-success">200 OK</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center font-mono py-2">
+                      <span>GET /api/v1/admin/dashboard/summary</span>
+                      <span class="badge bg-success">200 OK</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center font-mono py-2">
+                      <span>GET /api/v1/admin/reports</span>
+                      <span class="badge bg-success">200 OK</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center font-mono py-2">
+                      <span>GET /api/v1/ehs/incidents</span>
+                      <span class="badge bg-success">200 OK</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center font-mono py-2">
+                      <span>POST /api/v1/sync/batch</span>
+                      <span class="badge bg-success">200 OK</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center font-mono py-2">
+                      <span>GET /api/v1/technicians</span>
+                      <span class="badge bg-success">200 OK</span>
+                    </li>
+                  </ul>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="fw-bold"><i class="bi bi-server text-primary me-1"></i> SQLite Database Engine</h6>
+                  <div class="p-3 bg-light rounded border small">
+                    <div class="mb-2"><strong>Database File:</strong> <span class="font-mono">fieldpulse.sqlite</span></div>
+                    <div class="mb-2"><strong>Journal Mode:</strong> <span class="badge bg-dark font-mono">WAL (Write-Ahead Logging)</span></div>
+                    <div class="mb-2"><strong>Foreign Keys:</strong> <span class="badge bg-success font-mono">ON</span></div>
+                    <div class="mb-2"><strong>cPanel Drop-in Compatibility:</strong> <code>cpanel-backend/index.php</code></div>
+                    <div><strong>Server Runtime:</strong> Node.js / Express 5</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </main>
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- BOOTSTRAP MODALS -->
+    <!-- ======================================================== -->
+
+    <!-- 1. MODAL: REPORT HAZARD / INCIDENT -->
+    <div class="modal fade" id="modalReportIncident" tabindex="-1" aria-labelledby="modalReportIncidentLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-warning text-dark">
+            <h5 class="modal-title fw-bold" id="modalReportIncidentLabel">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i> Log Field Hazard / Safety Incident
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <form id="formReportIncident">
+            <div class="modal-body">
+              <div class="row g-3">
+                <div class="col-md-8">
+                  <label class="form-label small fw-bold">Incident Title *</label>
+                  <input type="text" id="inputIncidentTitle" class="form-control" placeholder="e.g., Frayed grounding wire on transformer rack" required />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small fw-bold">Incident Type *</label>
+                  <select id="selectIncidentType" class="form-select" required>
+                    <option value="HAZARD_IDENTIFIED">Hazard Identified</option>
+                    <option value="EQUIPMENT_FAILURE">Equipment Failure</option>
+                    <option value="NEAR_MISS">Near Miss</option>
+                    <option value="SLIP_TRIP_FALL">Slip / Trip / Fall</option>
+                    <option value="ELECTRICAL_LOTO">Electrical / LOTO Defect</option>
+                    <option value="CHEMICAL_SPILL">Chemical Spill</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label small fw-bold">Risk Level & Protocol *</label>
+                  <select id="selectIncidentRisk" class="form-select" required>
+                    <option value="LOW">Low (Minor correction needed)</option>
+                    <option value="MEDIUM" selected>Medium (Action within shift)</option>
+                    <option value="HIGH">High (Immediate supervisor notification)</option>
+                    <option value="CRITICAL_STOP_WORK">CRITICAL STOP-WORK (Immediate evacuation/lockout)</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label small fw-bold">Attach Photo (Optional)</label>
+                  <input type="file" id="inputIncidentPhotoFile" class="form-control" accept="image/*" />
+                  <input type="hidden" id="hiddenIncidentPhoto" />
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label small fw-bold">Hazard Description *</label>
+                  <textarea id="textareaIncidentDesc" class="form-control" rows="3" placeholder="Provide detailed physical conditions observed..." required></textarea>
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label small fw-bold">Immediate Corrective Action Taken *</label>
+                  <textarea id="textareaIncidentAction" class="form-control" rows="2" placeholder="e.g. Danger tape deployed, breaker locked out, site engineer notified..." required></textarea>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer bg-light">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-warning fw-bold text-dark">
+                <i class="bi bi-shield-fill-exclamation me-1"></i> Submit Safety Report
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. MODAL: ADD TECHNICIAN -->
+    <div class="modal fade" id="modalAddTech" tabindex="-1" aria-labelledby="modalAddTechLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header bg-dark text-white">
+            <h5 class="modal-title fw-bold" id="modalAddTechLabel">
+              <i class="bi bi-person-plus-fill text-warning me-1"></i> Register Field Technician
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <form id="formAddTech">
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label small fw-bold">Full Legal Name *</label>
+                <input type="text" id="inputTechName" class="form-control" placeholder="e.g., Liam O'Connor" required />
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label small fw-bold">Employee Code *</label>
+                  <input type="text" id="inputTechCode" class="form-control font-mono" placeholder="SE-9921" required />
+                </div>
+                <div class="col-6">
+                  <label class="form-label small fw-bold">Initial PIN</label>
+                  <input type="text" id="inputTechPin" class="form-control font-mono" value="7842" required />
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-bold">Company Email *</label>
+                <input type="email" id="inputTechEmail" class="form-control" placeholder="liam.oconnor@spectrum-ehs.com" required />
+              </div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label small fw-bold">Mobile Phone</label>
+                  <input type="text" id="inputTechPhone" class="form-control" placeholder="(415) 555-0123" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label small fw-bold">Expected Shift Start</label>
+                  <input type="time" id="inputTechShift" class="form-control font-mono" value="08:00" />
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer bg-light">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary fw-bold">
+                <i class="bi bi-save me-1"></i> Save Technician
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. MODAL: UPDATE INCIDENT STATUS -->
+    <div class="modal fade" id="modalUpdateIncident" tabindex="-1" aria-labelledby="modalUpdateIncidentLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header bg-dark text-white">
+            <h5 class="modal-title fw-bold" id="modalUpdateIncidentLabel">
+              <i class="bi bi-pencil-square text-warning me-1"></i> Update Incident Status & Resolution
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <form id="formUpdateIncident">
+            <div class="modal-body">
+              <input type="hidden" id="modalIncId" />
+              <div class="mb-3">
+                <div class="text-secondary small">Incident Title:</div>
+                <div id="modalIncTitleText" class="fw-bold text-dark fs-6">--</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-bold">Operational Status *</label>
+                <select id="modalIncStatusSelect" class="form-select" required>
+                  <option value="OPEN">OPEN (Under review)</option>
+                  <option value="INVESTIGATING">INVESTIGATING (EHS team dispatched)</option>
+                  <option value="RESOLVED">RESOLVED (Corrective action verified)</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-bold">Resolution Notes & Clearance Details</label>
+                <textarea id="modalIncResolutionNotes" class="form-control" rows="3" placeholder="Document corrective repair, re-testing, or work authorization permit..."></textarea>
+              </div>
+            </div>
+            <div class="modal-footer bg-light">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary fw-bold">
+                <i class="bi bi-check-circle me-1"></i> Save Status Update
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. MODAL: PHOTO EVIDENCE LIGHTBOX -->
+    <div class="modal fade" id="modalPhotoLightbox" tabindex="-1" aria-labelledby="modalPhotoLightboxLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content bg-dark text-white">
+          <div class="modal-header border-secondary">
+            <h6 class="modal-title font-mono" id="lightboxCaption">Evidence Photo</h6>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body text-center p-0">
+            <img id="lightboxImage" src="" alt="Evidence Photo" class="img-fluid rounded" style="max-height: 75vh; object-fit: contain;" />
+          </div>
+          <div class="modal-footer border-secondary justify-content-between">
+            <span class="small text-muted font-mono"><i class="bi bi-shield-check text-success"></i> Tamper-Verified Evidence</span>
+            <a id="lightboxDownload" href="#" class="btn btn-sm btn-outline-light" download>
+              <i class="bi bi-download me-1"></i> Download Photo
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index: 1090;"></div>
+
+    <!-- Dashboard App Script (TypeScript handled via Vite) -->
+    <script type="module" src="/src/dashboard.ts"></script>
   </body>
 </html>
-
